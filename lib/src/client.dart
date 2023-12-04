@@ -19,7 +19,7 @@ class WebdavClient {
   final String url;
 
   /// Wrapped http client
-  final _client = _WdDio(debug: false);
+  final _client = _WdDio();
 
   /// Auth Mode (noAuth/basic/digest)
   Auth auth;
@@ -62,7 +62,8 @@ class WebdavClient {
   // }
 
   /// Read all files in a folder
-  Future<List<WebdavFile>> readDir(String path, [CancelToken? cancelToken]) async {
+  Future<List<WebdavFile>> readDir(String path,
+      [CancelToken? cancelToken]) async {
     path = _fixSlashes(path);
     var resp = await _client.wdPropfind(this, path, true, fileXmlStr,
         cancelToken: cancelToken);
@@ -250,17 +251,7 @@ class _WdDio with DioMixin implements Dio {
   // // Request config
   // BaseOptions? baseOptions;
 
-  // Interceptors
-  final List<Interceptor>? interceptorList;
-
-  // debug
-  final bool debug;
-
-  _WdDio({
-    BaseOptions? options,
-    this.interceptorList,
-    this.debug = false,
-  }) {
+  _WdDio({BaseOptions? options}) {
     this.options = options ?? BaseOptions();
     // 禁止重定向
     this.options.followRedirects = false;
@@ -269,18 +260,6 @@ class _WdDio with DioMixin implements Dio {
     this.options.validateStatus = (status) => true;
 
     httpClientAdapter = getAdapter();
-
-    // 拦截器
-    if (interceptorList != null) {
-      for (var item in interceptorList!) {
-        this.interceptors.add(item);
-      }
-    }
-
-    // debug
-    if (debug == true) {
-      this.interceptors.add(LogInterceptor(responseBody: true));
-    }
   }
 
   // methods-------------------------
@@ -373,7 +352,7 @@ class _WdDio with DioMixin implements Dio {
   // OPTIONS
   Future<Response> wdOptions(WebdavClient self, String path,
       {CancelToken? cancelToken}) {
-    return this.req(self, 'OPTIONS', path,
+    return req(self, 'OPTIONS', path,
         optionsHandler: (options) => options.headers?['depth'] = '0',
         cancelToken: cancelToken);
   }
@@ -421,12 +400,13 @@ class _WdDio with DioMixin implements Dio {
   }
 
   /// COPY OR MOVE
-  Future<void> wdCopyMove(
-      WebdavClient self, String oldPath, String newPath, bool isCopy, bool overwrite,
+  Future<void> wdCopyMove(WebdavClient self, String oldPath, String newPath,
+      bool isCopy, bool overwrite,
       {CancelToken? cancelToken}) async {
     var method = isCopy == true ? 'COPY' : 'MOVE';
     var resp = await this.req(self, method, oldPath, optionsHandler: (options) {
-      options.headers?['destination'] = Uri.encodeFull(_join(self.url, newPath));
+      options.headers?['destination'] =
+          Uri.encodeFull(_join(self.url, newPath));
       options.headers?['overwrite'] = overwrite == true ? 'T' : 'F';
     }, cancelToken: cancelToken);
 
@@ -718,7 +698,10 @@ class _WdDio with DioMixin implements Dio {
       'PUT',
       path,
       data: data,
-      optionsHandler: (options) => options.headers?['content-length'] = length,
+      optionsHandler: (options) {
+        options.headers?['content-length'] = length;
+        options.headers?['content-type'] = 'application/octet-stream';
+      },
       onSendProgress: onProgress,
       cancelToken: cancelToken,
     );
