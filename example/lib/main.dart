@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:webdav_client/webdav_client.dart' as webdav;
+import 'package:webdav_client/webdav_client.dart';
 
 void main() {
   runApp(const MyApp());
@@ -29,39 +29,24 @@ class MyHomePage extends StatefulWidget {
 
 class MyHomePageState extends State<MyHomePage> {
   // webdav
-  late webdav.Client client;
+  final client = WebdavClient(
+      url: '',
+      user: '',
+      pwd: '',
+    );
 
-  // TODO need change your test url && user && pwd
   // if you use browser and received 'XMLHttpRequest error'  you need check cors!!!
   // https://stackoverflow.com/questions/65630743/how-to-solve-flutter-web-api-cors-error-only-with-dart-code
-  final url = '';
-  final user = '';
-  final pwd = '';
   final dirPath = '/';
 
-  @override
-  void initState() {
-    super.initState();
-
-    // init client
-    client = webdav.newClient(
-      url,
-      user: user,
-      password: pwd,
-      debug: true,
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
-    if (url.isEmpty || user.isEmpty || pwd.isEmpty) {
-      return const Center(child: Text("you need add url || user || pwd"));
-    }
     return Scaffold(
       body: FutureBuilder(
           future: _getData(),
           builder: (BuildContext context,
-              AsyncSnapshot<List<webdav.File>> snapshot) {
+              AsyncSnapshot<List<WebdavFile>> snapshot) {
             switch (snapshot.connectionState) {
               case ConnectionState.none:
               case ConnectionState.active:
@@ -77,11 +62,11 @@ class MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  Future<List<webdav.File>> _getData() {
+  Future<List<WebdavFile>> _getData() {
     return client.readDir(dirPath);
   }
 
-  Widget _buildListView(BuildContext context, List<webdav.File> list) {
+  Widget _buildListView(BuildContext context, List<WebdavFile> list) {
     return ListView.builder(
         itemCount: list.length,
         itemBuilder: (context, index) {

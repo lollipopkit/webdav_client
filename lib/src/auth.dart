@@ -1,4 +1,8 @@
 import 'dart:convert';
+import 'dart:math';
+import 'package:convert/convert.dart';
+import 'package:webdav_client/src/md5.dart';
+
 import 'utils.dart';
 
 /// Auth type
@@ -87,7 +91,7 @@ class DigestAuth extends Auth {
 
   String _getDigestAuthorization() {
     int nonceCount = 1;
-    String cnonce = computeNonce();
+    String cnonce = _computeNonce();
     String ha1 = _computeHA1(nonceCount, cnonce);
     String ha2 = _computeHA2();
     String response = _computeResponse(ha1, ha2, nonceCount, cnonce);
@@ -110,10 +114,10 @@ class DigestAuth extends Auth {
     String? algorithm = this.algorithm;
 
     if (algorithm == 'MD5' || algorithm?.isEmpty != false) {
-      return md5Hash('${this.user}:${this.realm}:${this.pwd}');
+      return _md5Hash('${this.user}:${this.realm}:${this.pwd}');
     } else if (algorithm == 'MD5-sess') {
-      String md5Str = md5Hash('${this.user}:${this.realm}:${this.pwd}');
-      return md5Hash('$md5Str:$nonceCount:$cnonce');
+      String md5Str = _md5Hash('${this.user}:${this.realm}:${this.pwd}');
+      return _md5Hash('$md5Str:$nonceCount:$cnonce');
     }
 
     return '';
@@ -124,10 +128,10 @@ class DigestAuth extends Auth {
     String? qop = this.qop;
 
     if (qop == 'auth' || qop?.isEmpty != false) {
-      return md5Hash('${this.dParts.method}:${this.dParts.uri}');
+      return _md5Hash('${this.dParts.method}:${this.dParts.uri}');
     } else if (qop == 'auth-int' && this.entityBody?.isEmpty == false) {
-      return md5Hash(
-          '${this.dParts.method}:${this.dParts.uri}:${md5Hash(this.entityBody!)}');
+      return _md5Hash(
+          '${this.dParts.method}:${this.dParts.uri}:${_md5Hash(this.entityBody!)}');
     }
 
     return '';
@@ -139,9 +143,9 @@ class DigestAuth extends Auth {
     String? qop = this.qop;
 
     if (qop?.isEmpty != false) {
-      return md5Hash('$ha1:${this.nonce}:$ha2');
+      return _md5Hash('$ha1:${this.nonce}:$ha2');
     } else if (qop == 'auth' || qop == 'auth-int') {
-      return md5Hash('$ha1:${this.nonce}:$nonceCount:$cnonce:$qop:$ha2');
+      return _md5Hash('$ha1:${this.nonce}:$nonceCount:$cnonce:$qop:$ha2');
     }
 
     return '';
@@ -178,4 +182,20 @@ class DigestParts {
       });
     }
   }
+}
+
+String _md5Hash(String data) {
+  final hasher = new MD5()..add(Utf8Encoder().convert(data));
+  var bytes = hasher.close();
+  var result = new StringBuffer();
+  for (var part in bytes) {
+    result.write('${part < 16 ? '0' : ''}${part.toRadixString(16)}');
+  }
+  return result.toString();
+}
+
+String _computeNonce() {
+  final rnd = Random.secure();
+  final values = List<int>.generate(16, (i) => rnd.nextInt(256));
+  return hex.encode(values).substring(0, 16);
 }

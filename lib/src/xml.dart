@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:xml/xml.dart';
 
 import 'file.dart';
@@ -28,8 +29,8 @@ class WebdavXml {
   static List<XmlElement> findElements(XmlElement element, String tag) =>
       element.findElements(tag, namespace: '*').toList();
 
-  static List<File> toFiles(String path, String xmlStr, {skipSelf = true}) {
-    var files = <File>[];
+  static List<WebdavFile> toFiles(String path, String xmlStr, {skipSelf = true}) {
+    var files = <WebdavFile>[];
     var xmlDocument = XmlDocument.parse(xmlStr);
     List<XmlElement> list = findAllElements(xmlDocument, 'response');
     // response
@@ -59,7 +60,7 @@ class WebdavXml {
               if (isDir) {
                 break;
               }
-              throw newXmlError('xml parse error(405)');
+              throw _newXmlError('xml parse error(405)');
             }
 
             // mimeType
@@ -90,7 +91,7 @@ class WebdavXml {
             // modified time
             final mTimeElements = findElements(prop, 'getlastmodified');
             DateTime? mTime = mTimeElements.isNotEmpty
-                ? str2LocalTime(mTimeElements.single.text)
+                ? _str2LocalTime(mTimeElements.single.text)
                 : null;
 
             //
@@ -98,7 +99,7 @@ class WebdavXml {
             var name = path2Name(str);
             var filePath = path + name + (isDir ? '/' : '');
 
-            files.add(File(
+            files.add(WebdavFile(
               path: filePath,
               isDir: isDir,
               name: name,
@@ -116,3 +117,49 @@ class WebdavXml {
     return files;
   }
 }
+
+// create xml error
+DioException _newXmlError(dynamic err) {
+  return DioException(
+    requestOptions: RequestOptions(path: '/'),
+    type: DioExceptionType.unknown,
+    error: err,
+  );
+}
+
+DateTime? _str2LocalTime(String? str) {
+  if (str == null) {
+    return null;
+  }
+  var s = str.toLowerCase();
+  if (!s.endsWith('gmt')) {
+    return null;
+  }
+  var list = s.split(' ');
+  if (list.length != 6) {
+    return null;
+  }
+  var month = _monthMap[list[2]];
+  if (month == null) {
+    return null;
+  }
+
+  return DateTime.parse(
+          '${list[3]}-$month-${list[1].padLeft(2, '0')}T${list[4]}Z')
+      .toLocal();
+}
+
+const _monthMap = {
+  'jan': '01',
+  'feb': '02',
+  'mar': '03',
+  'apr': '04',
+  'may': '05',
+  'jun': '06',
+  'jul': '07',
+  'aug': '08',
+  'sep': '09',
+  'oct': '10',
+  'nov': '11',
+  'dec': '12',
+};

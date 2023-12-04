@@ -2,14 +2,14 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:test/test.dart';
-import 'package:webdav_client/webdav_client.dart' as webdav;
+import 'package:webdav_client/src/client.dart';
+import 'package:webdav_client/webdav_client.dart';
 
 void main() {
-  var client = webdav.newClient(
-    'https://something',
+  final client = WebdavClient(
+    url: 'https://something',
     user: 'user',
-    password: 'pwd',
-    debug: true,
+    pwd: 'pwd',
   );
 
   // test ping
@@ -97,7 +97,7 @@ void main() {
     }, timeout: Timeout.none);
 
     test('read remote file 2 local file', () async {
-      await client.read2File('/f/vpn2.exe', 'F:/download/1v.exe',
+      await client.readFile('/f/vpn2.exe', 'F:/download/1v.exe',
           onProgress: (c, t) {
         print(c / t);
       });
@@ -118,7 +118,7 @@ void main() {
 
     test('write a file to server', () async {
       CancelToken c = CancelToken();
-      await client.writeFromFile(
+      await client.writeFile(
           'F:/download/VMware-player.exe', '/test100/VMware-player.exe',
           onProgress: (c, t) {
         print(c / t);
