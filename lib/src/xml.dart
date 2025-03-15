@@ -29,91 +29,89 @@ class WebdavXml {
   static List<XmlElement> findElements(XmlElement element, String tag) =>
       element.findElements(tag, namespace: '*').toList();
 
-  static List<WebdavFile> toFiles(String path, String xmlStr, {skipSelf = true}) {
-    var files = <WebdavFile>[];
-    var xmlDocument = XmlDocument.parse(xmlStr);
-    List<XmlElement> list = findAllElements(xmlDocument, 'response');
+  static List<WebdavFile> toFiles(
+    String path,
+    String xmlStr, {
+    skipSelf = true,
+  }) {
+    final files = <WebdavFile>[];
+    final xmlDocument = XmlDocument.parse(xmlStr);
+    final list = findAllElements(xmlDocument, 'response');
     // response
-    list.forEach((element) {
+    for (final element in list) {
       // name
       final hrefElements = findElements(element, 'href');
-      String href = hrefElements.isNotEmpty ? hrefElements.single.text : '';
+      final href = hrefElements.firstOrNull?.value;
+      if (href == null) continue;
 
       // propstats
-      var props = findElements(element, 'propstat');
+      var propStats = findElements(element, 'propstat');
       // propstat
-      for (var propstat in props) {
+      for (var propstat in propStats) {
         // ignore != 200
-        if (findElements(propstat, 'status').single.text.contains('200')) {
-          // prop
-          for (var prop in findElements(propstat, 'prop')) {
-            final resourceTypeElements = findElements(prop, 'resourcetype');
-            // isDir
-            bool isDir = resourceTypeElements.isNotEmpty
-                ? findElements(resourceTypeElements.single, 'collection')
-                    .isNotEmpty
-                : false;
+        final propStatus = findElements(propstat, 'status').firstOrNull?.value;
+        if (propStatus == null || !propStatus.contains('200')) continue;
 
-            // skip self
-            if (skipSelf) {
-              skipSelf = false;
-              if (isDir) {
-                break;
-              }
-              throw _newXmlError('xml parse error(405)');
+        // prop
+        for (var prop in findElements(propstat, 'prop')) {
+          final resourceTypeElements = findElements(prop, 'resourcetype');
+          // isDir
+          bool isDir = resourceTypeElements.isNotEmpty
+              ? findElements(resourceTypeElements.single, 'collection')
+                  .isNotEmpty
+              : false;
+
+          // skip self
+          if (skipSelf) {
+            skipSelf = false;
+            if (isDir) {
+              break;
             }
-
-            // mimeType
-            final mimeTypeElements = findElements(prop, 'getcontenttype');
-            String mimeType =
-                mimeTypeElements.isNotEmpty ? mimeTypeElements.single.text : '';
-
-            // size
-            int size = 0;
-            if (!isDir) {
-              final sizeElements = findElements(prop, 'getcontentlength');
-              size = sizeElements.isNotEmpty
-                  ? int.parse(sizeElements.single.text)
-                  : 0;
-            }
-
-            // eTag
-            final eTagElements = findElements(prop, 'getetag');
-            String eTag =
-                eTagElements.isNotEmpty ? eTagElements.single.text : '';
-
-            // create time
-            final cTimeElements = findElements(prop, 'creationdate');
-            DateTime? cTime = cTimeElements.isNotEmpty
-                ? DateTime.parse(cTimeElements.single.text).toLocal()
-                : null;
-
-            // modified time
-            final mTimeElements = findElements(prop, 'getlastmodified');
-            DateTime? mTime = mTimeElements.isNotEmpty
-                ? _str2LocalTime(mTimeElements.single.text)
-                : null;
-
-            //
-            var str = Uri.decodeFull(href);
-            var name = path2Name(str);
-            var filePath = path + name + (isDir ? '/' : '');
-
-            files.add(WebdavFile(
-              path: filePath,
-              isDir: isDir,
-              name: name,
-              mimeType: mimeType,
-              size: size,
-              eTag: eTag,
-              cTime: cTime,
-              mTime: mTime,
-            ));
-            break;
+            throw _newXmlError('xml parse error(405)');
           }
+
+          // mimeType
+          final mimeTypeElements = findElements(prop, 'getcontenttype');
+          final mimeType = mimeTypeElements.firstOrNull?.value;
+
+          // size
+          int? size = 0;
+          if (!isDir) {
+            final sizeE = findElements(prop, 'getcontentlength').firstOrNull?.value;
+            if (sizeE != null) {
+              size = int.tryParse(sizeE);
+            }
+          }
+
+          // eTag
+          final eTag = findElements(prop, 'getetag').firstOrNull?.value;
+
+          // create time
+          final cTimeElements = findElements(prop, 'creationdate').firstOrNull?.value;
+          final cTime = cTimeElements != null ? DateTime.tryParse(cTimeElements) : null;
+
+          // modified time
+          final mTimeElements = findElements(prop, 'getlastmodified').firstOrNull?.value;
+          final mTime = _str2LocalTime(mTimeElements);
+
+          final str = Uri.decodeFull(href);
+          final name = path2Name(str);
+          final filePath = path + name + (isDir ? '/' : '');
+
+          files.add(WebdavFile(
+            path: filePath,
+            isDir: isDir,
+            name: name,
+            mimeType: mimeType,
+            size: size,
+            eTag: eTag,
+            cTime: cTime,
+            mTime: mTime,
+          ));
+          break;
         }
       }
-    });
+    };
     return files;
   }
 }

@@ -141,10 +141,10 @@ class WebdavClient {
   /// If you rename the folder, some webdav services require a '/' at the end of the path.
   Future<void> rename(
     String oldPath,
-    String newPath,
-    bool overwrite, [
+    String newPath, {
+    bool overwrite = false,
     CancelToken? cancelToken,
-  ]) {
+  }) {
     return _client.wdCopyMove(this, oldPath, newPath, false, overwrite);
   }
 
@@ -153,10 +153,10 @@ class WebdavClient {
   /// Some webdav services have been tested and found to delete the original contents of the B folder!!!
   Future<void> copy(
     String oldPath,
-    String newPath,
-    bool overwrite, [
+    String newPath, {
+    bool overwrite = false,
     CancelToken? cancelToken,
-  ]) {
+  }) {
     return _client.wdCopyMove(this, oldPath, newPath, true, overwrite);
   }
 
@@ -430,8 +430,22 @@ class _WdDio with DioMixin implements Dio {
     }, cancelToken: cancelToken);
 
     var status = resp.statusCode;
-    // TODO 207
-    if (status == 201 || status == 204 || status == 207) {
+    if (status == 201 || status == 204) {
+      return;
+    } else if (status == 207) {
+      // Handle Multi-Status response (207)
+      // Parse the XML response to determine if any critical operations failed
+      String responseData = resp.data.toString();
+      if (responseData.contains('<status>HTTP/1.1 5')) {
+        // If response contains any 5xx errors, consider it a failure
+        throw DioException(
+          requestOptions: resp.requestOptions,
+          response: resp,
+          type: DioExceptionType.badResponse,
+          error: 'Multi-Status operation partially failed: $responseData',
+        );
+      }
+      // Otherwise, operation was successful enough to proceed
       return;
     } else if (status == 409) {
       await this._createParent(self, newPath, cancelToken: cancelToken);
@@ -657,6 +671,7 @@ class _WdDio with DioMixin implements Dio {
         }
       });
     }
+    // ignore: invalid_use_of_internal_member
     await DioMixin.listenCancelForAsyncTask(cancelToken, future);
   }
 
