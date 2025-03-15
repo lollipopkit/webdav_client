@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:convert/convert.dart';
 import 'package:crypto/crypto.dart' as crypto;
-import 'package:webdav_client/src/md5.dart';
+import 'package:webdav_client_plus/src/md5.dart';
 
 /// Auth for WebDAV client
 sealed class Auth {

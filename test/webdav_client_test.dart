@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:test/test.dart';
-import 'package:webdav_client/webdav_client.dart';
+import 'package:webdav_client_plus/webdav_client_plus.dart';
 
 const _baseTestDir = '.test';
 const _testDir = 'test dir';

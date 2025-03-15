@@ -1,5 +1,5 @@
 import 'package:test/test.dart';
-import 'package:webdav_client/src/xml.dart';
+import 'package:webdav_client_plus/src/xml.dart';
 
 void main() {
   test('propfind', () {
