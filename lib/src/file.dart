@@ -1,21 +1,26 @@
 class WebdavFile {
-  String? path;
-  bool? isDir;
-  String? name;
+  String path;
+  bool isDir;
+  String name;
   String? mimeType;
   int? size;
   String? eTag;
-  DateTime? cTime;
-  DateTime? mTime;
+  DateTime? created;
+  DateTime? modified;
 
   WebdavFile({
-    this.path,
-    this.isDir,
-    this.name,
+    required this.path,
+    required this.isDir,
+    required this.name,
     this.mimeType,
     this.size,
     this.eTag,
-    this.cTime,
-    this.mTime,
+    this.created,
+    this.modified,
   });
+
+  @override
+  String toString() {
+    return 'WebdavFile{path: $path, isDir: $isDir, name: $name, mimeType: $mimeType, size: $size, eTag: $eTag, created: $created, modified: $modified}';
+  }
 }

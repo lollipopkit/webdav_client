@@ -21,14 +21,32 @@ class WebdavClient {
   /// Wrapped http client
   final _client = _WdDio();
 
-  /// Auth Mode (noAuth/basic/digest)
+  /// Auth Mode (noAuth/basic/digest/bearer)
   Auth auth;
 
+  /// Create a client with username and password
   WebdavClient({
+    required this.url,
+    this.auth = const NoAuth(),
+  });
+
+  /// Create a client with basic auth
+  WebdavClient.basicAuth({
     required this.url,
     required String user,
     required String pwd,
-  }) : auth = Auth(user: user, pwd: pwd);
+  }) : auth = BasicAuth(user: user, pwd: pwd);
+
+  /// Create a client with bearer token
+  WebdavClient.bearerToken({
+    required this.url,
+    required String token,
+  }) : auth = BearerAuth(token: token);
+
+  /// Create a client with no authentication
+  WebdavClient.noAuth({
+    required this.url,
+  }) : auth = const NoAuth();
 
   // methods--------------------------------
 
@@ -65,7 +83,7 @@ class WebdavClient {
   Future<List<WebdavFile>> readDir(String path,
       [CancelToken? cancelToken]) async {
     path = _fixSlashes(path);
-    var resp = await _client.wdPropfind(this, path, true, fileXmlStr,
+    final resp = await _client.wdPropfind(this, path, true, fileXmlStr,
         cancelToken: cancelToken);
 
     String str = resp.data;
@@ -73,20 +91,19 @@ class WebdavClient {
   }
 
   /// Read a single files properties
-  Future<WebdavFile> readProps(String path, [CancelToken? cancelToken]) async {
-    path = _fixSlashes(path);
-    var resp = await this
-        ._client
-        .wdPropfind(this, path, true, fileXmlStr, cancelToken: cancelToken);
+  Future<WebdavFile?> readProps(String path, [CancelToken? cancelToken]) async {
+    // path = _fixSlashes(path);
+    final resp = await _client.wdPropfind(this, path, true, fileXmlStr,
+        cancelToken: cancelToken);
 
-    String str = resp.data;
-    return WebdavXml.toFiles(path, str, skipSelf: false).first;
+    final str = resp.data;
+    return WebdavXml.toFiles(path, str, skipSelf: false).firstOrNull;
   }
 
   /// Create a folder
   Future<void> mkdir(String path, [CancelToken? cancelToken]) async {
     path = _fixSlashes(path);
-    var resp = await this._client.wdMkcol(this, path, cancelToken: cancelToken);
+    var resp = await _client.wdMkcol(this, path, cancelToken: cancelToken);
     var status = resp.statusCode;
     if (status != 201 && status != 405) {
       throw _newResponseError(resp);
@@ -96,7 +113,7 @@ class WebdavClient {
   /// Recursively create folders
   Future<void> mkdirAll(String path, [CancelToken? cancelToken]) async {
     path = _fixSlashes(path);
-    var resp = await this._client.wdMkcol(this, path, cancelToken: cancelToken);
+    var resp = await _client.wdMkcol(this, path, cancelToken: cancelToken);
     var status = resp.statusCode;
     if (status == 201 || status == 405) {
       return;
@@ -108,7 +125,7 @@ class WebdavClient {
           continue;
         }
         sub += e + '/';
-        resp = await this._client.wdMkcol(this, sub, cancelToken: cancelToken);
+        resp = await _client.wdMkcol(this, sub, cancelToken: cancelToken);
         status = resp.statusCode;
         if (status != 201 && status != 405) {
           throw _newResponseError(resp);
@@ -128,7 +145,7 @@ class WebdavClient {
   /// Remove files
   Future<void> removeAll(String path, [CancelToken? cancelToken]) async {
     var resp =
-        await this._client.wdDelete(this, path, cancelToken: cancelToken);
+        await _client.wdDelete(this, path, cancelToken: cancelToken);
     if (resp.statusCode == 200 ||
         resp.statusCode == 204 ||
         resp.statusCode == 404) {
@@ -145,19 +162,36 @@ class WebdavClient {
     bool overwrite = false,
     CancelToken? cancelToken,
   }) {
-    return _client.wdCopyMove(this, oldPath, newPath, false, overwrite);
+    return _client.wdCopyMove(
+      this,
+      oldPath,
+      newPath,
+      false,
+      overwrite,
+      cancelToken: cancelToken,
+    );
   }
 
-  /// Copy a file / folder from A to B
+  /// Copy a file / folder from A to B.
+  ///
   /// If copied the folder (A > B), it will copy all the contents of folder A to folder B.
-  /// Some webdav services have been tested and found to delete the original contents of the B folder!!!
+  ///
+  /// **Warning:**
+  /// Some webdav services have been tested and found to **delete** the original contents of the B folder!!!
   Future<void> copy(
     String oldPath,
     String newPath, {
     bool overwrite = false,
     CancelToken? cancelToken,
   }) {
-    return _client.wdCopyMove(this, oldPath, newPath, true, overwrite);
+    return _client.wdCopyMove(
+      this,
+      oldPath,
+      newPath,
+      true,
+      overwrite,
+      cancelToken: cancelToken,
+    );
   }
 
   /// Read the bytes of a file
@@ -225,18 +259,19 @@ class WebdavClient {
     );
   }
 
-//   WebdavClient(String uri,
-//     {String user = '', String password = '', bool debug = false}) {
-//   return WebdavClient(
-//     uri: fixSlash(uri),
-//     c: WdDio(debug: debug),
-//     auth: Auth(user: user, pwd: password),
-//     debug: debug,
-//   );
-// }
+  Future<bool> exists(String path, [CancelToken? cancelToken]) async {
+    try {
+      await readProps(path, cancelToken);
+      return true;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        return false;
+      }
+      rethrow;
+    }
+  }
 }
 
-// 添加 '/' 前后缀
 String _fixSlashes(String s) {
   if (!s.startsWith('/')) {
     s = '/${s}';
@@ -290,7 +325,7 @@ class _WdDio with DioMixin implements Dio {
       options.headers?['authorization'] = str;
     }
 
-    var resp = await this.requestUri<T>(
+    var resp = await requestUri<T>(
       Uri.parse(
           '${path.startsWith(RegExp(r'(http|https)://')) ? path : _join(self.url, path)}'),
       options: options,
@@ -301,40 +336,29 @@ class _WdDio with DioMixin implements Dio {
     );
 
     if (resp.statusCode == 401) {
-      String? w3AHeader = resp.headers.value('www-authenticate');
-      String? lowerW3AHeader = w3AHeader?.toLowerCase();
+      final w3AHeader = resp.headers.value('www-authenticate');
+      final lowerW3AHeader = w3AHeader?.toLowerCase();
 
-      // before is noAuth
-      if (self.auth.type == AuthType.NoAuth) {
-        // Digest
-        if (lowerW3AHeader?.contains('digest') == true) {
-          self.auth = DigestAuth(
-              user: self.auth.user,
-              pwd: self.auth.pwd,
-              dParts: DigestParts(w3AHeader));
-        }
-        // Basic
-        else if (lowerW3AHeader?.contains('basic') == true) {
-          self.auth = BasicAuth(user: self.auth.user, pwd: self.auth.pwd);
-        }
-        // error
-        else {
-          throw _newResponseError(resp);
-        }
-      }
-      // before is digest and Nonce Lifetime is out
-      else if (self.auth.type == AuthType.DigestAuth &&
-          lowerW3AHeader?.contains('stale=true') == true) {
-        self.auth = DigestAuth(
-            user: self.auth.user,
-            pwd: self.auth.pwd,
-            dParts: DigestParts(w3AHeader));
-      } else {
-        throw _newResponseError(resp);
+      final exception = switch (self.auth) {
+        /// TODO: handle this
+        final NoAuth _ => () => _newResponseError(resp),
+        final DigestAuth digestAuth => () {
+            final isStale = lowerW3AHeader?.contains('stale=true') == true;
+            if (!isStale) return _newResponseError(resp);
+            self.auth = DigestAuth(
+                user: digestAuth.user,
+                pwd: digestAuth.pwd,
+                digestParts: DigestParts(w3AHeader));
+          }(),
+        _ => _newResponseError(resp),
+      };
+
+      if (exception != null) {
+        throw exception;
       }
 
       // retry
-      return this.req<T>(
+      return req<T>(
         self,
         method,
         path,
@@ -351,7 +375,7 @@ class _WdDio with DioMixin implements Dio {
         if (list != null && list.isNotEmpty) {
           String redirectPath = list[0];
           // retry
-          return this.req<T>(
+          return req<T>(
             self,
             method,
             redirectPath,
@@ -379,7 +403,7 @@ class _WdDio with DioMixin implements Dio {
   // // quota
   // Future<Response> wdQuota(Client self, String dataStr,
   //     {CancelToken cancelToken}) {
-  //   return this.req(self, 'PROPFIND', '/', data: utf8.encode(dataStr),
+  //   return req(self, 'PROPFIND', '/', data: utf8.encode(dataStr),
   //       optionsHandler: (options) {
   //     options.headers['depth'] = '0';
   //     options.headers['accept'] = 'text/plain';
@@ -390,7 +414,7 @@ class _WdDio with DioMixin implements Dio {
   Future<Response> wdPropfind(
       WebdavClient self, String path, bool depth, String dataStr,
       {CancelToken? cancelToken}) async {
-    var resp = await this.req(self, 'PROPFIND', path, data: dataStr,
+    var resp = await req(self, 'PROPFIND', path, data: dataStr,
         optionsHandler: (options) {
       options.headers?['depth'] = depth ? '1' : '0';
       options.headers?['content-type'] = 'application/xml;charset=UTF-8';
@@ -409,13 +433,13 @@ class _WdDio with DioMixin implements Dio {
   /// MKCOL
   Future<Response> wdMkcol(WebdavClient self, String path,
       {CancelToken? cancelToken}) {
-    return this.req(self, 'MKCOL', path, cancelToken: cancelToken);
+    return req(self, 'MKCOL', path, cancelToken: cancelToken);
   }
 
   /// DELETE
   Future<Response> wdDelete(WebdavClient self, String path,
       {CancelToken? cancelToken}) {
-    return this.req(self, 'DELETE', path, cancelToken: cancelToken);
+    return req(self, 'DELETE', path, cancelToken: cancelToken);
   }
 
   /// COPY OR MOVE
@@ -423,7 +447,7 @@ class _WdDio with DioMixin implements Dio {
       bool isCopy, bool overwrite,
       {CancelToken? cancelToken}) async {
     var method = isCopy == true ? 'COPY' : 'MOVE';
-    var resp = await this.req(self, method, oldPath, optionsHandler: (options) {
+    var resp = await req(self, method, oldPath, optionsHandler: (options) {
       options.headers?['destination'] =
           Uri.encodeFull(_join(self.url, newPath));
       options.headers?['overwrite'] = overwrite == true ? 'T' : 'F';
@@ -448,8 +472,8 @@ class _WdDio with DioMixin implements Dio {
       // Otherwise, operation was successful enough to proceed
       return;
     } else if (status == 409) {
-      await this._createParent(self, newPath, cancelToken: cancelToken);
-      return this.wdCopyMove(self, oldPath, newPath, isCopy, overwrite,
+      await _createParent(self, newPath, cancelToken: cancelToken);
+      return wdCopyMove(self, oldPath, newPath, isCopy, overwrite,
           cancelToken: cancelToken);
     } else {
       throw _newResponseError(resp);
@@ -475,12 +499,12 @@ class _WdDio with DioMixin implements Dio {
     CancelToken? cancelToken,
   }) async {
     // fix auth error
-    var pResp = await this.wdOptions(self, path, cancelToken: cancelToken);
+    var pResp = await wdOptions(self, path, cancelToken: cancelToken);
     if (pResp.statusCode != 200) {
       throw _newResponseError(pResp);
     }
 
-    var resp = await this.req(
+    var resp = await req(
       self,
       'GET',
       path,
@@ -491,7 +515,7 @@ class _WdDio with DioMixin implements Dio {
     if (resp.statusCode != 200) {
       if (resp.statusCode != null) {
         if (resp.statusCode! >= 300 && resp.statusCode! < 400) {
-          return (await this.req(
+          return (await req(
             self,
             'GET',
             resp.headers["location"]!.first,
@@ -517,7 +541,7 @@ class _WdDio with DioMixin implements Dio {
     CancelToken? cancelToken,
   }) async {
     // fix auth error
-    var pResp = await this.wdOptions(self, path, cancelToken: cancelToken);
+    var pResp = await wdOptions(self, path, cancelToken: cancelToken);
     if (pResp.statusCode != 200) {
       throw _newResponseError(pResp);
     }
@@ -527,7 +551,7 @@ class _WdDio with DioMixin implements Dio {
     // Reference Dio download
     // request
     try {
-      resp = await this.req(
+      resp = await req(
         self,
         'GET',
         path,
@@ -555,30 +579,37 @@ class _WdDio with DioMixin implements Dio {
 
     resp.headers = Headers.fromMap(resp.data!.headers);
 
-    //If directory (or file) doesn't exist yet, the entire method fails
+    // If directory (or file) doesn't exist yet, the entire method fails
     final file = File(savePath);
-    file.createSync(recursive: true);
+    await file.create(recursive: true);
 
-    var raf = file.openSync(mode: FileMode.write);
+    var raf = await file.open(mode: FileMode.write);
 
     //Create a Completer to notify the success/error state.
-    var completer = Completer<Response>();
+    final completer = Completer<Response>();
     var future = completer.future;
     var received = 0;
 
     // Stream<Uint8List>
-    var stream = resp.data!.stream;
+    final stream = resp.data!.stream;
     var compressed = false;
     var total = 0;
-    var contentEncoding = resp.headers.value(Headers.contentEncodingHeader);
+    final contentEncoding = resp.headers.value(Headers.contentEncodingHeader);
     if (contentEncoding != null) {
       compressed = ['gzip', 'deflate', 'compress'].contains(contentEncoding);
     }
     if (compressed) {
       total = -1;
     } else {
-      total =
-          int.parse(resp.headers.value(Headers.contentLengthHeader) ?? '-1');
+      final contentLength = resp.headers.value(Headers.contentLengthHeader);
+      if (contentLength != null) {
+        final parsed = int.tryParse(contentLength);
+        if (parsed != null) {
+          total = parsed;
+        }
+      } else {
+        total = -1;
+      }
     }
 
     late StreamSubscription subscription;
@@ -684,15 +715,15 @@ class _WdDio with DioMixin implements Dio {
     CancelToken? cancelToken,
   }) async {
     // fix auth error
-    var pResp = await this.wdOptions(self, path, cancelToken: cancelToken);
+    var pResp = await wdOptions(self, path, cancelToken: cancelToken);
     if (pResp.statusCode != 200) {
       throw _newResponseError(pResp);
     }
 
     // mkdir
-    await this._createParent(self, path, cancelToken: cancelToken);
+    await _createParent(self, path, cancelToken: cancelToken);
 
-    var resp = await this.req(
+    var resp = await req(
       self,
       'PUT',
       path,
@@ -719,15 +750,15 @@ class _WdDio with DioMixin implements Dio {
     CancelToken? cancelToken,
   }) async {
     // fix auth error
-    var pResp = await this.wdOptions(self, path, cancelToken: cancelToken);
+    var pResp = await wdOptions(self, path, cancelToken: cancelToken);
     if (pResp.statusCode != 200) {
       throw _newResponseError(pResp);
     }
 
     // mkdir
-    await this._createParent(self, path, cancelToken: cancelToken);
+    await _createParent(self, path, cancelToken: cancelToken);
 
-    var resp = await this.req(
+    var resp = await req(
       self,
       'PUT',
       path,

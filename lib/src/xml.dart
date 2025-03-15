@@ -1,8 +1,6 @@
-import 'package:dio/dio.dart';
 import 'package:xml/xml.dart';
 
 import 'file.dart';
-import 'utils.dart';
 
 const fileXmlStr = '''<d:propfind xmlns:d='DAV:'>
 			<d:prop>
@@ -15,14 +13,7 @@ const fileXmlStr = '''<d:propfind xmlns:d='DAV:'>
 			</d:prop>
 		</d:propfind>''';
 
-// const quotaXmlStr = '''<d:propfind xmlns:d="DAV:">
-//            <d:prop>
-//              <d:quota-available-bytes/>
-//              <d:quota-used-bytes/>
-//            </d:prop>
-//          </d:propfind>''';
-
-class WebdavXml {
+abstract final class WebdavXml {
   static List<XmlElement> findAllElements(XmlDocument document, String tag) =>
       document.findAllElements(tag, namespace: '*').toList();
 
@@ -30,12 +21,12 @@ class WebdavXml {
       element.findElements(tag, namespace: '*').toList();
 
   /// Extract a string value from the first matching element
-  static String? getElementValue(XmlElement parent, String tag) =>
-      findElements(parent, tag).firstOrNull?.value;
+  static String? getElementText(XmlElement parent, String tag) =>
+      findElements(parent, tag).firstOrNull?.innerText;
   
   /// Extract an integer value from the first matching element
   static int? getIntValue(XmlElement parent, String tag) {
-    final value = getElementValue(parent, tag);
+    final value = getElementText(parent, tag);
     return value != null ? int.tryParse(value) : null;
   }
 
@@ -55,7 +46,7 @@ class WebdavXml {
     bool firstEntry = skipSelf;
     
     for (final response in responseElements) {
-      final href = getElementValue(response, 'href');
+      final href = getElementText(response, 'href');
       if (href == null) continue;
 
       // Find successful propstat element
@@ -63,22 +54,21 @@ class WebdavXml {
       if (propstat == null) continue;
 
       // Find and process prop element
-      final propElements = findElements(propstat, 'prop');
-      if (propElements.isEmpty) continue;
-      
-      final prop = propElements.first;
+      final prop = findElements(propstat, 'prop').firstOrNull;
+      if (prop == null) continue;
       
       // Handle skipSelf logic for first entry
       if (firstEntry) {
         firstEntry = false;
         final isFirstDir = _isDirectory(prop);
         
-        if (isFirstDir) continue;
-        throw _newXmlError('xml parse error(405)');
+        // Only skip if it's a directory, otherwise process as normal
+        if (isFirstDir && skipSelf) continue;
       }
 
       // Create WebdavFile from prop data
       final file = _createFileFromProp(path, href, prop);
+      // print(file);
       files.add(file);
     }
     
@@ -88,7 +78,7 @@ class WebdavXml {
   /// Find the first successful propstat element
   static XmlElement? _findSuccessfulPropstat(XmlElement response) {
     for (var propstat in findElements(response, 'propstat')) {
-      final status = getElementValue(propstat, 'status');
+      final status = getElementText(propstat, 'status');
       if (status != null && status.contains('200')) {
         return propstat;
       }
@@ -108,48 +98,33 @@ class WebdavXml {
     final isDir = _isDirectory(prop);
     
     // Extract metadata
-    final mimeType = getElementValue(prop, 'getcontenttype');
-    final eTag = getElementValue(prop, 'getetag');
-    
-    // Size (0 for directories)
-    int? size = 0;
-    if (!isDir) {
-      size = getIntValue(prop, 'getcontentlength');
-    }
+    final mimeType = getElementText(prop, 'getcontenttype');
+    final eTag = getElementText(prop, 'getetag');
+    final size = isDir ? null : getIntValue(prop, 'getcontentlength');
     
     // Creation time
-    final cTimeStr = getElementValue(prop, 'creationdate');
+    final cTimeStr = getElementText(prop, 'creationdate');
     final cTime = cTimeStr != null ? DateTime.tryParse(cTimeStr) : null;
     
     // Modified time
-    final mTimeStr = getElementValue(prop, 'getlastmodified');
+    final mTimeStr = getElementText(prop, 'getlastmodified');
     final mTime = _parseHttpDate(mTimeStr);
     
-    // Process path and name
+    // Path and name
     final decodedHref = Uri.decodeFull(href);
-    final name = path2Name(decodedHref);
-    final filePath = basePath + name + (isDir ? '/' : '');
+    final name = getElementText(prop, 'displayname') ?? decodedHref.split('/').last;
     
     return WebdavFile(
-      path: filePath,
+      path: decodedHref,
       isDir: isDir,
       name: name,
       mimeType: mimeType,
       size: size,
       eTag: eTag,
-      cTime: cTime,
-      mTime: mTime,
+      created: cTime,
+      modified: mTime,
     );
   }
-}
-
-// create xml error
-DioException _newXmlError(dynamic err) {
-  return DioException(
-    requestOptions: RequestOptions(path: '/'),
-    type: DioExceptionType.unknown,
-    error: err,
-  );
 }
 
 /// Parse HTTP date format to DateTime
