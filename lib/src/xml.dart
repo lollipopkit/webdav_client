@@ -29,6 +29,20 @@ class WebdavXml {
   static List<XmlElement> findElements(XmlElement element, String tag) =>
       element.findElements(tag, namespace: '*').toList();
 
+  /// Extract a string value from the first matching element
+  static String? getElementValue(XmlElement parent, String tag) =>
+      findElements(parent, tag).firstOrNull?.value;
+  
+  /// Extract an integer value from the first matching element
+  static int? getIntValue(XmlElement parent, String tag) {
+    final value = getElementValue(parent, tag);
+    return value != null ? int.tryParse(value) : null;
+  }
+
+  /// Check if element contains a specific child element
+  static bool hasElement(XmlElement parent, String childTag) =>
+      findElements(parent, childTag).isNotEmpty;
+
   static List<WebdavFile> toFiles(
     String path,
     String xmlStr, {
@@ -36,83 +50,96 @@ class WebdavXml {
   }) {
     final files = <WebdavFile>[];
     final xmlDocument = XmlDocument.parse(xmlStr);
-    final list = findAllElements(xmlDocument, 'response');
-    // response
-    for (final element in list) {
-      // name
-      final hrefElements = findElements(element, 'href');
-      final href = hrefElements.firstOrNull?.value;
+    final responseElements = findAllElements(xmlDocument, 'response');
+    
+    bool firstEntry = skipSelf;
+    
+    for (final response in responseElements) {
+      final href = getElementValue(response, 'href');
       if (href == null) continue;
 
-      // propstats
-      var propStats = findElements(element, 'propstat');
-      // propstat
-      for (var propstat in propStats) {
-        // ignore != 200
-        final propStatus = findElements(propstat, 'status').firstOrNull?.value;
-        if (propStatus == null || !propStatus.contains('200')) continue;
+      // Find successful propstat element
+      final propstat = _findSuccessfulPropstat(response);
+      if (propstat == null) continue;
 
-        // prop
-        for (var prop in findElements(propstat, 'prop')) {
-          final resourceTypeElements = findElements(prop, 'resourcetype');
-          // isDir
-          bool isDir = resourceTypeElements.isNotEmpty
-              ? findElements(resourceTypeElements.single, 'collection')
-                  .isNotEmpty
-              : false;
-
-          // skip self
-          if (skipSelf) {
-            skipSelf = false;
-            if (isDir) {
-              break;
-            }
-            throw _newXmlError('xml parse error(405)');
-          }
-
-          // mimeType
-          final mimeTypeElements = findElements(prop, 'getcontenttype');
-          final mimeType = mimeTypeElements.firstOrNull?.value;
-
-          // size
-          int? size = 0;
-          if (!isDir) {
-            final sizeE = findElements(prop, 'getcontentlength').firstOrNull?.value;
-            if (sizeE != null) {
-              size = int.tryParse(sizeE);
-            }
-          }
-
-          // eTag
-          final eTag = findElements(prop, 'getetag').firstOrNull?.value;
-
-          // create time
-          final cTimeElements = findElements(prop, 'creationdate').firstOrNull?.value;
-          final cTime = cTimeElements != null ? DateTime.tryParse(cTimeElements) : null;
-
-          // modified time
-          final mTimeElements = findElements(prop, 'getlastmodified').firstOrNull?.value;
-          final mTime = _str2LocalTime(mTimeElements);
-
-          final str = Uri.decodeFull(href);
-          final name = path2Name(str);
-          final filePath = path + name + (isDir ? '/' : '');
-
-          files.add(WebdavFile(
-            path: filePath,
-            isDir: isDir,
-            name: name,
-            mimeType: mimeType,
-            size: size,
-            eTag: eTag,
-            cTime: cTime,
-            mTime: mTime,
-          ));
-          break;
-        }
+      // Find and process prop element
+      final propElements = findElements(propstat, 'prop');
+      if (propElements.isEmpty) continue;
+      
+      final prop = propElements.first;
+      
+      // Handle skipSelf logic for first entry
+      if (firstEntry) {
+        firstEntry = false;
+        final isFirstDir = _isDirectory(prop);
+        
+        if (isFirstDir) continue;
+        throw _newXmlError('xml parse error(405)');
       }
-    };
+
+      // Create WebdavFile from prop data
+      final file = _createFileFromProp(path, href, prop);
+      files.add(file);
+    }
+    
     return files;
+  }
+  
+  /// Find the first successful propstat element
+  static XmlElement? _findSuccessfulPropstat(XmlElement response) {
+    for (var propstat in findElements(response, 'propstat')) {
+      final status = getElementValue(propstat, 'status');
+      if (status != null && status.contains('200')) {
+        return propstat;
+      }
+    }
+    return null;
+  }
+  
+  /// Determine if resource is a directory
+  static bool _isDirectory(XmlElement prop) {
+    final resourceTypes = findElements(prop, 'resourcetype');
+    return resourceTypes.isNotEmpty && 
+           hasElement(resourceTypes.first, 'collection');
+  }
+  
+  /// Create a WebdavFile object from prop data
+  static WebdavFile _createFileFromProp(String basePath, String href, XmlElement prop) {
+    final isDir = _isDirectory(prop);
+    
+    // Extract metadata
+    final mimeType = getElementValue(prop, 'getcontenttype');
+    final eTag = getElementValue(prop, 'getetag');
+    
+    // Size (0 for directories)
+    int? size = 0;
+    if (!isDir) {
+      size = getIntValue(prop, 'getcontentlength');
+    }
+    
+    // Creation time
+    final cTimeStr = getElementValue(prop, 'creationdate');
+    final cTime = cTimeStr != null ? DateTime.tryParse(cTimeStr) : null;
+    
+    // Modified time
+    final mTimeStr = getElementValue(prop, 'getlastmodified');
+    final mTime = _parseHttpDate(mTimeStr);
+    
+    // Process path and name
+    final decodedHref = Uri.decodeFull(href);
+    final name = path2Name(decodedHref);
+    final filePath = basePath + name + (isDir ? '/' : '');
+    
+    return WebdavFile(
+      path: filePath,
+      isDir: isDir,
+      name: name,
+      mimeType: mimeType,
+      size: size,
+      eTag: eTag,
+      cTime: cTime,
+      mTime: mTime,
+    );
   }
 }
 
@@ -125,26 +152,33 @@ DioException _newXmlError(dynamic err) {
   );
 }
 
-DateTime? _str2LocalTime(String? str) {
-  if (str == null) {
+/// Parse HTTP date format to DateTime
+DateTime? _parseHttpDate(String? httpDate) {
+  if (httpDate == null) return null;
+  
+  try {
+    final pattern = RegExp(
+      r'(\w{3}), (\d{2}) (\w{3}) (\d{4}) (\d{2}):(\d{2}):(\d{2}) GMT',
+      caseSensitive: false,
+    );
+    final match = pattern.firstMatch(httpDate);
+    
+    if (match != null) {
+      final day = match.group(2)!.padLeft(2, '0');
+      final month = _monthMap[match.group(3)!.toLowerCase()];
+      final year = match.group(4);
+      final time = '${match.group(5)}:${match.group(6)}:${match.group(7)}';
+      
+      if (month != null) {
+        return DateTime.parse('$year-$month-${day}T${time}Z').toLocal();
+      }
+    }
+    
+    // Fallback for any other formats
+    return DateTime.tryParse(httpDate);
+  } catch (_) {
     return null;
   }
-  var s = str.toLowerCase();
-  if (!s.endsWith('gmt')) {
-    return null;
-  }
-  var list = s.split(' ');
-  if (list.length != 6) {
-    return null;
-  }
-  var month = _monthMap[list[2]];
-  if (month == null) {
-    return null;
-  }
-
-  return DateTime.parse(
-          '${list[3]}-$month-${list[1].padLeft(2, '0')}T${list[4]}Z')
-      .toLocal();
 }
 
 const _monthMap = {
