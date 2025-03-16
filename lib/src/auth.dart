@@ -233,78 +233,17 @@ class DigestParts {
     'charset': '',
   };
 
+  static final headerRegex = RegExp(
+    r'(\w+)=(?:"([^"]*)"|([^,]*))',
+    caseSensitive: false,
+  );
   void _parseAuthHeader(String headerData) {
-    // Handle quoted strings with possible escaped quotes
-    bool inQuotes = false;
-    bool escaped = false;
-    StringBuffer currentParam = StringBuffer();
-    StringBuffer currentValue = StringBuffer();
-    bool collectingName = true;
-    String currentName = '';
+    final matches = headerRegex.allMatches(headerData);
 
-    for (int i = 0; i < headerData.length; i++) {
-      String char = headerData[i];
-
-      if (escaped) {
-        if (collectingName) {
-          currentParam.write(char);
-        } else {
-          currentValue.write(char);
-        }
-        escaped = false;
-        continue;
-      }
-
-      if (char == '\\') {
-        escaped = true;
-        continue;
-      }
-
-      if (char == '"') {
-        inQuotes = !inQuotes;
-        if (!collectingName) {
-          // Don't include the quotes in the value
-          continue;
-        }
-      }
-
-      if (!inQuotes && char == '=') {
-        collectingName = false;
-        currentName = currentParam.toString().trim();
-        currentParam.clear();
-        continue;
-      }
-
-      if (!inQuotes && (char == ',' || i == headerData.length - 1)) {
-        // If this is the last character, include it
-        if (i == headerData.length - 1 && char != ',') {
-          if (collectingName) {
-            currentParam.write(char);
-          } else {
-            currentValue.write(char);
-          }
-        }
-
-        // End of a parameter
-        if (!collectingName && currentName.isNotEmpty) {
-          String value = currentValue.toString().trim();
-          parts[currentName.toLowerCase()] = value;
-        }
-
-        // Reset for next parameter
-        collectingName = true;
-        currentName = '';
-        currentParam.clear();
-        currentValue.clear();
-        continue;
-      }
-
-      // Add character to current buffer
-      if (collectingName) {
-        currentParam.write(char);
-      } else {
-        currentValue.write(char);
-      }
+    for (final match in matches) {
+      final key = match.group(1)!.toLowerCase();
+      final value = match.group(2) ?? match.group(3) ?? '';
+      parts[key] = value.trim();
     }
   }
 }
