@@ -26,20 +26,18 @@ try {
 
 ### Read all files in a folder
 ```dart
-var list = await client.readDir('/');
-list.forEach((f) {
-  print('${f.name} ${f.path}');
-});
+await client.readDir('/');
 ```
 
 ### Create folder
 ```dart
 await client.mkdir('/newFolder');
-// Recursively create folders
+// Recursively
 await client.mkdirAll('/new folder/new folder2');
 ```
 
-### Remove a folder or file
+
+### Remove
 > If you remove the folder, some webdav services require a '/' at the end of the path.
 ```dart
 // Delete folder
@@ -49,29 +47,24 @@ await client.remove('/new folder/new folder2/');
 await client.remove('/new folder/text.txt');
 ```
 
-### Rename a folder or file
+### Rename
 > If you rename the folder, some webdav services require a '/' at the end of the path.
 ```dart
-// Rename folder
 await client.rename('/dir/', '/dir2/', overwrite: true);
-
-// Rename file
 await client.rename('/dir/test.dart', '/dir2/test2.dart', overwrite: true);
 ```
 
-### Copy a file / folder from A to B
-> If copied the folder (A > B), it will copy all the contents of folder A to folder B.
-
-> Some webdav services have been tested and found to delete the original contents of the B folder!!!
+### Copy
+- If copied a folder, it will copy all the contents.
+- Some webdav services have been tested and found to delete the original contents of the target folder.
 ```dart
-// Copy all the contents of folderA to folder B
+// Copy all the contents
 await client.copy('/folder/folderA/', '/folder/folderB/', true);
-
 // Copy file
 await client.copy('/folder/aa.png', '/folder/bb.png', true);
 ```
 
-### Download file
+### Download
 ```dart
 // Bytes
 await client.read('/folder/file', onProgress: (count, total) {
@@ -79,7 +72,7 @@ await client.read('/folder/file', onProgress: (count, total) {
 });
 
 // Stream
-await client.read2File(
+await client.readFile(
   '/folder/file', 
   'file', 
   onProgress: (c, t) => print(c / t),
@@ -87,7 +80,7 @@ await client.read2File(
 );
 ```
 
-### Upload file
+### Upload
 ```dart
 // upload local file 2 remote file with stream
 await client.writeFile('file', '/f/file');
@@ -96,13 +89,9 @@ await client.writeFile('file', '/f/file');
 ### Cancel request
 ```dart
 final cancel = CancelToken();
-
-// Supports most methods
-client.mkdir('/新建文件夹', cancel)
+client.mkdir('/dir', cancel)
 .catchError((err) {
   prints(err.toString());
 });
-
-// Cancel request
 cancel.cancel('reason')
 ```

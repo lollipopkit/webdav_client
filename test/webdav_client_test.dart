@@ -13,14 +13,21 @@ void main() {
   group('NoAuth', () {
     final client = WebdavClient.noAuth(url: 'http://localhost:5001');
     _testClient(client);
+
+    test('Non-existent file', () async {
+      expect(
+        () => client.readFile('/non-existent-file.txt', 'output.txt'),
+        throwsA(anything),
+      );
+    });
   });
 
-  // group('Basic', () {
-  //   final client = WebdavClient(
-  //       url: 'http://localhost:5001',
-  //       auth: BasicAuth(user: 'test', pwd: 'test'));
-  //   _testClient(client);
-  // });
+  group('Basic', () {
+    final client = WebdavClient(
+        url: 'http://localhost:5002',
+        auth: BasicAuth(user: 'test', pwd: 'test'));
+    _testClient(client);
+  });
 
   // group('Bearer', () {
   //   final client = WebdavClient(
@@ -40,28 +47,17 @@ void main() {
   //   _testClient(client);
   // });
 
-  // group('Error handling', () {
-  //   final client = WebdavClient.noAuth(url: 'http://localhost:5001');
-
-  //   test('Non-existent file', () async {
-  //     expect(
-  //       () => client.readFile('/non-existent-file.txt', 'output.txt'),
-  //       throwsA(anything),
-  //     );
-  //   });
-
-  //   test('Invalid URL', () async {
-  //     final invalidClient = WebdavClient.noAuth(url: 'http://invalid-url');
-  //     expect(
-  //       () => invalidClient.ping(),
-  //       throwsA(anything),
-  //     );
-  //   });
-  // });
+  test('Invalid URL', () async {
+    final invalidClient = WebdavClient.noAuth(url: 'http://invalid-url');
+    expect(
+      () => invalidClient.ping(),
+      throwsA(anything),
+    );
+  });
 }
 
-void _testClient(WebdavClient client, [String desc = '']) async {
-  test(desc, () async {
+void _testClient(WebdavClient client) async {
+  test('init', () async {
     await Directory(_baseTestDir).delete(recursive: true);
     await Directory(_baseTestDir).create();
 
@@ -77,19 +73,19 @@ void _testClient(WebdavClient client, [String desc = '']) async {
     } catch (e) {
       print('$e');
     }
+  });
 
-    // mkdir
-
+  test('mkdir', () async {
     await client.mkdir(_testDir);
     await client.mkdirAll('/new folder/new folder2');
     await client.removeAll('/new folder');
+  });
 
-    // write
-
+  test('write', () async {
     await client.writeFile(_testFile, '/$_testDir/$_testFile');
+  });
 
-    // read props
-
+  test('read', () async {
     final props = await client.readProps('/$_testDir/$_testFile');
     expect(props, isNotNull);
     expect(props?.size, isNotNull);
@@ -97,17 +93,17 @@ void _testClient(WebdavClient client, [String desc = '']) async {
 
     final notExists = await client.exists('/$_testDir/not-exists.txt');
     expect(notExists, isFalse);
+  });
 
-    // list
-
+  test('list', () async {
     final listRootDir = await client.readDir('/');
     expect(listRootDir.length, 1);
 
     final listTestDir = await client.readDir(_testDir);
     expect(listTestDir.firstOrNull?.name, _testFile);
+  });
 
-    // rename
-
+  test('rename', () async {
     await client.rename(
       '/$_testDir/$_testFile',
       '/$_testDir2/$_testFile2',
@@ -115,14 +111,14 @@ void _testClient(WebdavClient client, [String desc = '']) async {
     );
     final renamed = await client.exists('/$_testDir2/$_testFile2');
     expect(renamed, isTrue);
+  });
 
-    // read
-
+  test('read', () async {
     final readContent = await client.read('/$_testDir2/$_testFile2');
     expect(readContent, isNotEmpty);
+  });
 
-    // copy
-
+  test('copy', () async {
     await client.copy(
       '/$_testDir2/$_testFile2',
       '/$_testDir/$_testFile',
@@ -130,9 +126,9 @@ void _testClient(WebdavClient client, [String desc = '']) async {
     );
     final copied = await client.exists('/$_testDir/$_testFile');
     expect(copied, isTrue);
+  });
 
-    // concurrent
-
+  test('concurrent', () async {
     await Future.wait([
       client.mkdir('$_testDir/concurrent1'),
       client.mkdir('$_testDir/concurrent2'),
@@ -147,9 +143,9 @@ void _testClient(WebdavClient client, [String desc = '']) async {
       client.remove('/$_testDir/concurrent2'),
       client.remove('/$_testDir/concurrent3'),
     ]);
+  });
 
-    // final check
-
+  test('remove', () async {
     await client.remove('/$_testDir');
     await client.remove('/$_testDir2');
     final emptyDir = await client.readDir('/');
