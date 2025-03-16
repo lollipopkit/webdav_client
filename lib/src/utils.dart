@@ -1,31 +1,19 @@
-
-
-
-String trim(String str, [String? chars]) {
-  RegExp pattern =
-      (chars != null) ? RegExp('^[$chars]+|[$chars]+\$') : RegExp(r'^\s+|\s+$');
-  return str.replaceAll(pattern, '');
-}
-
-String ltrim(String str, [String? chars]) {
-  var pattern = chars != null ? RegExp('^[$chars]+') : RegExp(r'^\s+');
-  return str.replaceAll(pattern, '');
-}
-
-String rtrim(String str, [String? chars]) {
-  var pattern = chars != null ? RegExp('[$chars]+\$') : RegExp(r'\s+$');
-  return str.replaceAll(pattern, '');
-}
-
-// 获取文件名
-String path2Name(String path) {
-  var str = rtrim(path, '/');
-  var index = str.lastIndexOf('/');
-  if (index > -1) {
-    str = str.substring(index + 1);
+String joinPath(String path0, String path1) {
+  while (path0.isNotEmpty && path0.endsWith('/')) {
+    path0 = path0.substring(0, path0.length - 1);
   }
-  if (str == '') {
+
+  while (path1.isNotEmpty && path1.startsWith('/')) {
+    path1 = path1.substring(1);
+  }
+
+  if (path0.isEmpty && path1.isEmpty) {
     return '/';
   }
-  return str;
+
+  return path0.isEmpty
+      ? '/$path1'
+      : path1.isEmpty
+          ? '$path0/'
+          : '$path0/$path1';
 }

@@ -44,7 +44,7 @@ class _WdDio with DioMixin implements Dio {
     final resp = await requestUri(
       Uri.parse(path.startsWith(RegExp(r'(http|https)://'))
           ? path
-          : _join(self.url, path)),
+          : joinPath(self.url, path)),
       options: options,
       data: data,
       onSendProgress: onSendProgress,
@@ -185,8 +185,7 @@ class _WdDio with DioMixin implements Dio {
       {CancelToken? cancelToken}) async {
     final method = isCopy == true ? 'COPY' : 'MOVE';
     final resp = await req(self, method, oldPath, optionsHandler: (options) {
-      options.headers?['destination'] =
-          Uri.encodeFull(_join(self.url, newPath));
+      options.headers?['destination'] = Uri.encodeFull(joinPath(self.url, newPath));
       options.headers?['overwrite'] = overwrite == true ? 'T' : 'F';
     }, cancelToken: cancelToken);
 
@@ -604,8 +603,4 @@ class _WdDio with DioMixin implements Dio {
 
     return resp;
   }
-}
-
-String _join(String path0, String path1) {
-  return '${rtrim(path0, '/')}/${ltrim(path1, '/')}';
 }

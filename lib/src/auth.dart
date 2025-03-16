@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:convert/convert.dart';
 import 'package:crypto/crypto.dart' as crypto;
-import 'package:webdav_client_plus/src/md5.dart';
 
 /// Auth for WebDAV client
 sealed class Auth {
@@ -249,13 +248,8 @@ class DigestParts {
 }
 
 String _md5Hash(String data) {
-  final hasher = MD5()..add(const Utf8Encoder().convert(data));
-  final bytes = hasher.close();
-  final result = StringBuffer();
-  for (final part in bytes) {
-    result.write('${part < 16 ? '0' : ''}${part.toRadixString(16)}');
-  }
-  return result.toString();
+  final digest = crypto.md5.convert(utf8.encode(data));
+  return hex.encode(digest.bytes);
 }
 
 String _sha256Hash(String data) {
