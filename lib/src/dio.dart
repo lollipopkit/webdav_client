@@ -16,7 +16,7 @@ class _WdDio with DioMixin implements Dio {
   }
 
   // methods-------------------------
-  Future<Response<T>> req<T>(
+  Future<Response> req(
     WebdavClient self,
     String method,
     String path, {
@@ -27,7 +27,7 @@ class _WdDio with DioMixin implements Dio {
     CancelToken? cancelToken,
   }) async {
     // options
-    Options options = Options(method: method);
+    final options = Options(method: method);
     options.headers ??= {};
 
     // 二次处理options
@@ -36,14 +36,15 @@ class _WdDio with DioMixin implements Dio {
     }
 
     // authorization
-    String? str = self.auth.authorize(method, path);
-    if (str != null) {
-      options.headers?['authorization'] = str;
+    final authStr = self.auth.authorize(method, path);
+    if (authStr != null) {
+      options.headers?['authorization'] = authStr;
     }
 
-    var resp = await requestUri<T>(
-      Uri.parse(
-          path.startsWith(RegExp(r'(http|https)://')) ? path : _join(self.url, path)),
+    final resp = await requestUri(
+      Uri.parse(path.startsWith(RegExp(r'(http|https)://'))
+          ? path
+          : _join(self.url, path)),
       options: options,
       data: data,
       onSendProgress: onSendProgress,
@@ -67,7 +68,7 @@ class _WdDio with DioMixin implements Dio {
             );
 
             // 重试请求
-            return req<T>(
+            return req(
               self,
               method,
               path,
@@ -94,7 +95,7 @@ class _WdDio with DioMixin implements Dio {
         if (list != null && list.isNotEmpty) {
           String redirectPath = list[0];
           // retry
-          return req<T>(
+          return req(
             self,
             method,
             redirectPath,
@@ -112,11 +113,18 @@ class _WdDio with DioMixin implements Dio {
   }
 
   // OPTIONS
-  Future<Response> wdOptions(WebdavClient self, String path,
-      {CancelToken? cancelToken}) {
-    return req(self, 'OPTIONS', path,
-        optionsHandler: (options) => options.headers?['depth'] = '0',
-        cancelToken: cancelToken);
+  Future<Response<void>> wdOptions(
+    WebdavClient self,
+    String path, {
+    CancelToken? cancelToken,
+  }) {
+    return req(
+      self,
+      'OPTIONS',
+      path,
+      optionsHandler: (options) => options.headers?['depth'] = '0',
+      cancelToken: cancelToken,
+    );
   }
 
   // // quota
@@ -137,14 +145,20 @@ class _WdDio with DioMixin implements Dio {
     String dataStr, {
     CancelToken? cancelToken,
   }) async {
-    var resp = await req(self, 'PROPFIND', path, data: dataStr,
-        optionsHandler: (options) {
-      options.headers?['depth'] = depth.value;
-      options.headers?['content-type'] = 'application/xml;charset=UTF-8';
-      options.headers?['accept'] = 'application/xml,text/xml';
-      options.headers?['accept-charset'] = 'utf-8';
-      options.headers?['accept-encoding'] = '';
-    }, cancelToken: cancelToken);
+    var resp = await req(
+      self,
+      'PROPFIND',
+      path,
+      data: dataStr,
+      optionsHandler: (options) {
+        options.headers?['depth'] = depth.value;
+        options.headers?['content-type'] = 'application/xml;charset=UTF-8';
+        options.headers?['accept'] = 'application/xml,text/xml';
+        options.headers?['accept-charset'] = 'utf-8';
+        options.headers?['accept-encoding'] = '';
+      },
+      cancelToken: cancelToken,
+    );
 
     if (resp.statusCode != 207) {
       throw _newResponseError(resp);
@@ -154,13 +168,13 @@ class _WdDio with DioMixin implements Dio {
   }
 
   /// MKCOL
-  Future<Response> wdMkcol(WebdavClient self, String path,
+  Future<Response<void>> wdMkcol(WebdavClient self, String path,
       {CancelToken? cancelToken}) {
     return req(self, 'MKCOL', path, cancelToken: cancelToken);
   }
 
   /// DELETE
-  Future<Response> wdDelete(WebdavClient self, String path,
+  Future<Response<void>> wdDelete(WebdavClient self, String path,
       {CancelToken? cancelToken}) {
     return req(self, 'DELETE', path, cancelToken: cancelToken);
   }
@@ -169,20 +183,20 @@ class _WdDio with DioMixin implements Dio {
   Future<void> wdCopyMove(WebdavClient self, String oldPath, String newPath,
       bool isCopy, bool overwrite,
       {CancelToken? cancelToken}) async {
-    var method = isCopy == true ? 'COPY' : 'MOVE';
-    var resp = await req(self, method, oldPath, optionsHandler: (options) {
+    final method = isCopy == true ? 'COPY' : 'MOVE';
+    final resp = await req(self, method, oldPath, optionsHandler: (options) {
       options.headers?['destination'] =
           Uri.encodeFull(_join(self.url, newPath));
       options.headers?['overwrite'] = overwrite == true ? 'T' : 'F';
     }, cancelToken: cancelToken);
 
-    var status = resp.statusCode;
+    final status = resp.statusCode;
     if (status == 201 || status == 204) {
       return;
     } else if (status == 207) {
       // Handle Multi-Status response (207)
       // Parse the XML response to determine if any critical operations failed
-      String responseData = resp.data.toString();
+      final responseData = resp.data.toString();
       if (responseData.contains('<status>HTTP/1.1 5')) {
         // If response contains any 5xx errors, consider it a failure
         throw DioException(
@@ -250,7 +264,7 @@ class _WdDio with DioMixin implements Dio {
             onReceiveProgress: onProgress,
             cancelToken: cancelToken,
           );
-          return ret.data;
+          return ret.data as List<int>;
         }
 
         throw DioException(
@@ -262,7 +276,7 @@ class _WdDio with DioMixin implements Dio {
       }
       throw _newResponseError(resp);
     }
-    return resp.data;
+    return resp.data as List<int>;
   }
 
   /// read a file with stream
@@ -284,7 +298,7 @@ class _WdDio with DioMixin implements Dio {
     // Reference Dio download
     // request
     try {
-      resp = await req(
+      final ret = await req(
         self,
         'GET',
         path,
@@ -292,6 +306,7 @@ class _WdDio with DioMixin implements Dio {
         // onReceiveProgress: onProgress,
         cancelToken: cancelToken,
       );
+      resp = ret as Response<ResponseBody>;
     } on DioException catch (e) {
       if (e.type == DioExceptionType.badResponse) {
         if (e.response!.requestOptions.receiveDataWhenStatusError == true) {
@@ -324,7 +339,7 @@ class _WdDio with DioMixin implements Dio {
     var received = 0;
 
     // Stream<Uint8List>
-    final stream = resp.data!.stream;
+    final stream = resp.data!.stream as Stream<List<int>>;
     var compressed = false;
     var total = 0;
     final contentEncoding = resp.headers.value(Headers.contentEncodingHeader);
@@ -533,11 +548,13 @@ class _WdDio with DioMixin implements Dio {
         options.headers?['content-type'] = 'application/xml;charset=UTF-8';
         options.headers?['Timeout'] = 'Second-$timeout';
         options.headers?['Depth'] = depth.value;
+
+        options.responseType = ResponseType.plain;
       },
       cancelToken: cancelToken,
     );
 
-    var status = resp.statusCode;
+    final status = resp.statusCode;
     if (status != 200 && status != 201) {
       throw _newResponseError(resp);
     }
@@ -545,7 +562,7 @@ class _WdDio with DioMixin implements Dio {
     return resp;
   }
 
-  Future<Response> wdUnlock(
+  Future<Response<void>> wdUnlock(
     WebdavClient self,
     String path,
     String lockToken, {
@@ -569,11 +586,17 @@ class _WdDio with DioMixin implements Dio {
     String dataStr, {
     CancelToken? cancelToken,
   }) async {
-    var resp = await req(self, 'PROPPATCH', path, data: dataStr,
-        optionsHandler: (options) {
-      options.headers?['content-type'] = 'application/xml;charset=UTF-8';
-      options.headers?['accept'] = 'application/xml,text/xml';
-    }, cancelToken: cancelToken);
+    var resp = await req(
+      self,
+      'PROPPATCH',
+      path,
+      data: dataStr,
+      optionsHandler: (options) {
+        options.headers?['content-type'] = 'application/xml;charset=UTF-8';
+        options.headers?['accept'] = 'application/xml,text/xml';
+      },
+      cancelToken: cancelToken,
+    );
 
     if (resp.statusCode != 207) {
       throw _newResponseError(resp);

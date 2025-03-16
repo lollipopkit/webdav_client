@@ -98,7 +98,7 @@ class WebdavClient {
       cancelToken: cancelToken,
     );
 
-    String str = resp.data;
+    final str = resp.data as String;
     return WebdavXml.toFiles(path, str);
   }
 
@@ -113,7 +113,7 @@ class WebdavClient {
       cancelToken: cancelToken,
     );
 
-    final str = resp.data;
+    final str = resp.data as String;
     return WebdavXml.toFiles(path, str, skipSelf: false).firstOrNull;
   }
 
@@ -279,7 +279,7 @@ class WebdavClient {
     try {
       await readProps(path, cancelToken);
       return true;
-    } on DioException catch (e) {
+    } on WebdavException catch (e) {
       if (e.response?.statusCode == 404) {
         return false;
       }
@@ -328,7 +328,8 @@ class WebdavClient {
       cancelToken: cancelToken,
     );
 
-    return _extractLockToken(resp.data);
+    final str = resp.data as String;
+    return _extractLockToken(str);
   }
 
   /// Unlock a resource

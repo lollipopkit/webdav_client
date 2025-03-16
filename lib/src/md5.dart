@@ -24,7 +24,7 @@ abstract class _HashBase {
         _h = List.filled(digestSizeInWords, 0);
 
   // Update the hasher with more data.
-  add(List<int> data) {
+  void add(List<int> data) {
     if (_digestCalled) {
       throw StateError(
           'Hash update method called after digest was retrieved');
@@ -51,15 +51,12 @@ abstract class _HashBase {
     return _chunkSizeInWords * _BYTES_PER_WORD;
   }
 
-  // Create a fresh instance of this Hash.
-  newInstance();
-
   // One round of the hash computation.
-  _updateHash(List<int> m);
+  void _updateHash(List<int> m);
 
   // Helper methods.
-  _add32(x, y) => (x + y) & _MASK_32;
-  _roundUp(val, n) => (val + n - 1) & -n;
+  int _add32(int x, int y) => (x + y) & _MASK_32;
+  int _roundUp(int val, int n) => (val + n - 1) & -n;
 
   // Rotate left limiting to unsigned 32-bit values.
   int _rotl32(int val, int shift) {
@@ -78,7 +75,7 @@ abstract class _HashBase {
   }
 
   // Converts a list of bytes to a chunk of 32-bit words.
-  _bytesToChunk(List<int> data, int dataIndex) {
+  void _bytesToChunk(List<int> data, int dataIndex) {
     assert((data.length - dataIndex) >= (_chunkSizeInWords * _BYTES_PER_WORD));
 
     for (var wordIndex = 0; wordIndex < _chunkSizeInWords; wordIndex++) {
@@ -107,7 +104,7 @@ abstract class _HashBase {
 
   // Iterate through data updating the hash computation for each
   // chunk.
-  _iterate() {
+  void _iterate() {
     var len = _pendingData.length;
     var chunkSizeInBytes = _chunkSizeInWords * _BYTES_PER_WORD;
     if (len >= chunkSizeInBytes) {
@@ -122,10 +119,10 @@ abstract class _HashBase {
 
   // Finalize the data. Add a 1 bit to the end of the message. Expand with
   // 0 bits and add the length of the message.
-  _finalizeData() {
+  void _finalizeData() {
     _pendingData.add(0x80);
-    var contentsLength = _lengthInBytes + 9;
-    var chunkSizeInBytes = _chunkSizeInWords * _BYTES_PER_WORD;
+    final contentsLength = _lengthInBytes + 9;
+    final chunkSizeInBytes = _chunkSizeInWords * _BYTES_PER_WORD;
     var finalizedLength = _roundUp(contentsLength, chunkSizeInBytes);
     var zeroPadding = finalizedLength - contentsLength;
     for (var i = 0; i < zeroPadding; i++) {
@@ -150,12 +147,6 @@ class MD5 extends _HashBase {
     _h[1] = 0xefcdab89;
     _h[2] = 0x98badcfe;
     _h[3] = 0x10325476;
-  }
-
-  // Returns a new instance of this Hash.
-  @override
-  MD5 newInstance() {
-    return MD5();
   }
 
   static const _k = [

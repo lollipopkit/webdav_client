@@ -1,10 +1,10 @@
 part of 'client.dart';
 
-class WebdavException implements Exception {
+class WebdavException<T> implements Exception {
   final String message;
   final int? statusCode;
   final String? statusMessage;
-  final Response? response;
+  final Response<T>? response;
 
   WebdavException({
     required this.message,
@@ -18,7 +18,7 @@ class WebdavException implements Exception {
     return 'WebdavException: $message (Status: ${statusCode ?? "unknown"} ${statusMessage ?? ""})';
   }
 
-  factory WebdavException.fromResponse(Response response, [String? message]) {
+  factory WebdavException.fromResponse(Response<T> response, [String? message]) {
     final status = response.statusCode;
     final statusMessage = response.statusMessage;
 
@@ -62,6 +62,6 @@ class WebdavException implements Exception {
   }
 }
 
-WebdavException _newResponseError(Response resp, [String? message]) {
+WebdavException<T> _newResponseError<T>(Response<T> resp, [String? message]) {
   return WebdavException.fromResponse(resp, message);
 }

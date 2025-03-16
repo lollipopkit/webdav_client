@@ -36,7 +36,7 @@ abstract final class WebdavXml {
   static List<WebdavFile> toFiles(
     String path,
     String xmlStr, {
-    skipSelf = true,
+    bool skipSelf = true,
   }) {
     final files = <WebdavFile>[];
     final xmlDocument = XmlDocument.parse(xmlStr);
