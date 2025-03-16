@@ -89,7 +89,7 @@ class WebdavClient {
     ReadPropsDepth depth = ReadPropsDepth.one,
     CancelToken? cancelToken,
   }) async {
-    path = _fixSlashes(path);
+    path = _fixCollectionPath(path);
     final resp = await _client.wdPropfind(
       this,
       path,
@@ -119,7 +119,7 @@ class WebdavClient {
 
   /// Create a folder
   Future<void> mkdir(String path, [CancelToken? cancelToken]) async {
-    path = _fixSlashes(path);
+    path = _fixCollectionPath(path);
     var resp = await _client.wdMkcol(this, path, cancelToken: cancelToken);
     var status = resp.statusCode;
     if (status != 201 && status != 405) {
@@ -129,7 +129,7 @@ class WebdavClient {
 
   /// Recursively create folders
   Future<void> mkdirAll(String path, [CancelToken? cancelToken]) async {
-    path = _fixSlashes(path);
+    path = _fixCollectionPath(path);
     var resp = await _client.wdMkcol(this, path, cancelToken: cancelToken);
     var status = resp.statusCode;
     if (status == 201 || status == 405) {
@@ -275,7 +275,8 @@ class WebdavClient {
     );
   }
 
-  Future<bool> exists(String path, [CancelToken? cancelToken]) async {
+  /// Check if a resource exists
+  Future<bool> exists(String path, {CancelToken? cancelToken}) async {
     try {
       await readProps(path, cancelToken);
       return true;
@@ -289,6 +290,7 @@ class WebdavClient {
 
   /// Lock a resource
   ///
+  /// - [path] of the resource
   /// - [exclusive] If true, the lock is exclusive; if false, the lock is shared
   /// - [timeout] of the lock in seconds
   ///
@@ -312,8 +314,15 @@ class WebdavClient {
         xmlBuilder.element('d:write');
       });
       if (owner != null) {
+        // RFC 4918 14.17
+        // The owner XML can contain any XML content, so we need to handle URLs
         xmlBuilder.element('d:owner', nest: () {
-          xmlBuilder.element('d:href', nest: owner);
+          // If the owner is a URL, it must be wrapped in a <d:href> tag
+          if (owner.startsWith('http://') || owner.startsWith('https://')) {
+            xmlBuilder.element('d:href', nest: owner);
+          } else {
+            xmlBuilder.text(owner);
+          }
         });
       }
     });
@@ -328,6 +337,12 @@ class WebdavClient {
       cancelToken: cancelToken,
     );
 
+    // Check if the lock was successful
+    final status = resp.statusCode;
+    if (status != 200 && status != 201) {
+      throw _newResponseError(resp);
+    }
+
     final str = resp.data as String;
     return _extractLockToken(str);
   }
@@ -339,7 +354,9 @@ class WebdavClient {
   }
 
   /// Set properties of a resource
+  /// - [path] of the resource
   /// - [properties] is a map of key-value pairs
+  /// - [cancelToken] for cancelling the request
   Future<void> setProps(
     String path,
     Map<String, String> properties, {
@@ -369,9 +386,11 @@ class WebdavClient {
     await _client.wdProppatch(this, path, xmlString, cancelToken: cancelToken);
   }
 
-  /// 使用条件头执行PUT操作
-  /// [lockToken] - 资源的锁令牌
-  /// [etag] - 资源的ETag，用于确保只有在资源匹配时才更新
+  /// Put a resource according to the conditions
+  /// - [path] of the resource
+  /// - [data] to write
+  /// - [lockToken] If the resource is locked, the lock token must match
+  /// - [etag] If the resource has an etag, it must match the etag in the request
   Future<void> conditionalPut(
     String path,
     Uint8List data, {
@@ -382,16 +401,31 @@ class WebdavClient {
   }) async {
     final headers = <String, dynamic>{};
 
-    // 构建If头
+    // RFC 4918 10.4.2
     if (lockToken != null || etag != null) {
       final conditions = <String>[];
+      final taggedList = StringBuffer();
 
+      // If has a URL, add it to the tagged list
+      if (path.isNotEmpty) {
+        taggedList.write('<${Uri.encodeFull(joinPath(url, path))}>');
+      }
+
+      final resourceConditions = <String>[];
       if (lockToken != null) {
-        conditions.add('(<$lockToken>)');
+        resourceConditions.add('(<$lockToken>)');
       }
 
       if (etag != null) {
-        conditions.add('([$etag])');
+        resourceConditions.add('([$etag])');
+      }
+
+      if (taggedList.isNotEmpty) {
+        taggedList.write(' ${resourceConditions.join(' ')}');
+        conditions.add(taggedList.toString());
+      } else {
+        // No URL-specific conditions, just add the resource conditions
+        conditions.addAll(resourceConditions);
       }
 
       headers['If'] = conditions.join(' ');
@@ -406,13 +440,121 @@ class WebdavClient {
       cancelToken: cancelToken,
     );
   }
+
+  /// Modify properties of a resource
+  /// - [path] of the resource
+  /// - [setProps] is a map of key-value pairs to set
+  /// - [removeProps] is a list of keys to remove
+  /// - [cancelToken] for cancelling the request
+  Future<void> modifyProps(
+    String path, {
+    Map<String, String>? setProps,
+    List<String>? removeProps,
+    CancelToken? cancelToken,
+  }) async {
+    final xmlBuilder = XmlBuilder();
+    xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
+    xmlBuilder.element('d:propertyupdate', nest: () {
+      xmlBuilder.namespace('d', 'DAV:');
+
+      // Set properties
+      if (setProps != null && setProps.isNotEmpty) {
+        xmlBuilder.element('d:set', nest: () {
+          xmlBuilder.element('d:prop', nest: () {
+            setProps.forEach((key, value) {
+              final parts = key.split(':');
+              if (parts.length == 2) {
+                final prefix = parts[0];
+                final propName = parts[1];
+                // Add namespace declaration for non-DAV namespaces
+                if (prefix != 'd') {
+                  xmlBuilder.namespace(prefix, 'http://example.com/ns/$prefix');
+                }
+                xmlBuilder.element('$prefix:$propName', nest: value);
+              } else {
+                xmlBuilder.element('d:$key', nest: value);
+              }
+            });
+          });
+        });
+      }
+
+      // Delete properties
+      if (removeProps != null && removeProps.isNotEmpty) {
+        xmlBuilder.element('d:remove', nest: () {
+          xmlBuilder.element('d:prop', nest: () {
+            for (final key in removeProps) {
+              final parts = key.split(':');
+              if (parts.length == 2) {
+                final prefix = parts[0];
+                final propName = parts[1];
+                // Add namespace declaration for non-DAV namespaces
+                if (prefix != 'd') {
+                  xmlBuilder.namespace(prefix, 'http://example.com/ns/$prefix');
+                }
+                xmlBuilder.element('$prefix:$propName');
+              } else {
+                xmlBuilder.element('d:$key');
+              }
+            }
+          });
+        });
+      }
+    });
+
+    final xmlString = xmlBuilder.buildDocument().toString();
+    final resp = await _client.wdProppatch(this, path, xmlString,
+        cancelToken: cancelToken);
+
+    // Check if any properties failed to update
+    if (resp.statusCode == 207) {
+      final xmlDocument = XmlDocument.parse(resp.data as String);
+      final responseElements =
+          WebdavXml.findAllElements(xmlDocument, 'response');
+
+      for (final response in responseElements) {
+        final propstatElements = WebdavXml.findElements(response, 'propstat');
+        for (final propstat in propstatElements) {
+          final statusElement =
+              WebdavXml.findElements(propstat, 'status').firstOrNull;
+          if (statusElement != null) {
+            final statusText = statusElement.innerText;
+            // Check non-200 status codes
+            if (!statusText.contains('200') && !statusText.contains('204')) {
+              final href = WebdavXml.getElementText(response, 'href') ?? '';
+              throw WebdavException(
+                message: 'Failed to update properties for $href: $statusText',
+                statusCode: 422,
+              );
+            }
+          }
+        }
+      }
+    } else if (resp.statusCode != 200) {
+      throw _newResponseError(resp);
+    }
+  }
 }
 
 // Extract the lock token from the response
 String _extractLockToken(String xmlString) {
   final document = XmlDocument.parse(xmlString);
-  final hrefElements = document.findAllElements('href', namespace: '*');
 
+  // Try to find the lock token in a locktoken element
+  final lockTokenElements =
+      document.findAllElements('locktoken', namespace: '*');
+  for (final lockToken in lockTokenElements) {
+    final href = lockToken.findElements('href', namespace: '*').firstOrNull;
+    if (href != null) {
+      final text = href.innerText;
+      if (text.isNotEmpty) {
+        return text;
+      }
+    }
+  }
+
+  // If the lock token is not in a locktoken element, try to find it in a href element
+  final hrefElements = document.findAllElements('href', namespace: '*');
   for (final href in hrefElements) {
     final text = href.innerText;
     if (text.startsWith('urn:uuid:') || text.startsWith('opaquelocktoken:')) {
@@ -420,15 +562,18 @@ String _extractLockToken(String xmlString) {
     }
   }
 
-  throw Exception('No lock token found in response');
+  throw WebdavException(
+    message: 'No lock token found in response',
+    statusCode: 500,
+  );
 }
 
-String _fixSlashes(String s) {
-  if (!s.startsWith('/')) {
-    s = '/$s';
+String _fixCollectionPath(String path) {
+  if (!path.startsWith('/')) {
+    path = '/$path';
   }
-  if (!s.endsWith('/')) {
-    return '$s/';
+  if (!path.endsWith('/')) {
+    return '$path/';
   }
-  return s;
+  return path;
 }
