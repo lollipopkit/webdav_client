@@ -1,0 +1,38 @@
+include: package:lints/recommended.yaml
+
+analyzer:
+  language:
+    strict-casts: true
+    strict-raw-types: true
+  errors:
+    unused_local_variable: warning
+    avoid_print: warning
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+
+linter:
+  rules:
+    - always_use_package_imports
+    - avoid_empty_else
+    - avoid_relative_lib_imports
+    - avoid_type_to_string
+    - cancel_subscriptions
+    - close_sinks
+    - directives_ordering
+    - empty_constructor_bodies
+    - empty_statements
+    - hash_and_equals
+    - implementation_imports
+    - no_duplicate_case_values
+    - non_constant_identifier_names
+    - prefer_const_constructors
+    - prefer_const_declarations
+    - prefer_single_quotes
+    - sort_child_properties_last
+    - sort_pub_dependencies
+    - throw_in_finally
+    - unnecessary_brace_in_string_interps
+    - unnecessary_getters_setters
+    - unnecessary_null_aware_assignments
+    - unnecessary_statements

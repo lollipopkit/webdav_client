@@ -1,6 +1,5 @@
+import 'package:webdav_client_plus/src/file.dart';
 import 'package:xml/xml.dart';
-
-import 'file.dart';
 
 const fileXmlStr = '''<d:propfind xmlns:d='DAV:'>
 			<d:prop>
@@ -23,7 +22,7 @@ abstract final class WebdavXml {
   /// Extract a string value from the first matching element
   static String? getElementText(XmlElement parent, String tag) =>
       findElements(parent, tag).firstOrNull?.innerText;
-  
+
   /// Extract an integer value from the first matching element
   static int? getIntValue(XmlElement parent, String tag) {
     final value = getElementText(parent, tag);
@@ -42,9 +41,9 @@ abstract final class WebdavXml {
     final files = <WebdavFile>[];
     final xmlDocument = XmlDocument.parse(xmlStr);
     final responseElements = findAllElements(xmlDocument, 'response');
-    
+
     bool firstEntry = skipSelf;
-    
+
     for (final response in responseElements) {
       final href = getElementText(response, 'href');
       if (href == null) continue;
@@ -56,12 +55,12 @@ abstract final class WebdavXml {
       // Find and process prop element
       final prop = findElements(propstat, 'prop').firstOrNull;
       if (prop == null) continue;
-      
+
       // Handle skipSelf logic for first entry
       if (firstEntry) {
         firstEntry = false;
         final isFirstDir = _isDirectory(prop);
-        
+
         // Only skip if it's a directory, otherwise process as normal
         if (isFirstDir && skipSelf) continue;
       }
@@ -71,10 +70,10 @@ abstract final class WebdavXml {
       // print(file);
       files.add(file);
     }
-    
+
     return files;
   }
-  
+
   /// Find the first successful propstat element
   static XmlElement? _findSuccessfulPropstat(XmlElement response) {
     for (var propstat in findElements(response, 'propstat')) {
@@ -85,35 +84,74 @@ abstract final class WebdavXml {
     }
     return null;
   }
-  
+
   /// Determine if resource is a directory
   static bool _isDirectory(XmlElement prop) {
     final resourceTypes = findElements(prop, 'resourcetype');
-    return resourceTypes.isNotEmpty && 
-           hasElement(resourceTypes.first, 'collection');
+    return resourceTypes.isNotEmpty &&
+        hasElement(resourceTypes.first, 'collection');
   }
-  
+
   /// Create a WebdavFile object from prop data
-  static WebdavFile _createFileFromProp(String basePath, String href, XmlElement prop) {
+  static WebdavFile _createFileFromProp(
+    String basePath,
+    String href,
+    XmlElement prop,
+  ) {
     final isDir = _isDirectory(prop);
-    
-    // Extract metadata
+
+    // Extract properties
     final mimeType = getElementText(prop, 'getcontenttype');
     final eTag = getElementText(prop, 'getetag');
     final size = isDir ? null : getIntValue(prop, 'getcontentlength');
-    
-    // Creation time
+
+    // Created time
     final cTimeStr = getElementText(prop, 'creationdate');
     final cTime = cTimeStr != null ? DateTime.tryParse(cTimeStr) : null;
-    
+
     // Modified time
     final mTimeStr = getElementText(prop, 'getlastmodified');
     final mTime = _parseHttpDate(mTimeStr);
-    
+
     // Path and name
     final decodedHref = Uri.decodeFull(href);
-    final name = getElementText(prop, 'displayname') ?? decodedHref.split('/').last;
-    
+    var name = getElementText(prop, 'displayname');
+
+    // If name is not found, extract from path
+    if (name == null || name.isEmpty) {
+      final pathParts = decodedHref.split('/');
+      name = pathParts.lastWhere((part) => part.isNotEmpty, orElse: () => '/');
+    }
+
+    // Custom properties
+    final customProps = <String, String>{};
+    for (final element in prop.childElements) {
+      final localName = element.localName;
+      final namespace = element.namespaceUri;
+
+      // Skip common properties
+      if ([
+        'resourcetype',
+        'getcontenttype',
+        'getetag',
+        'getcontentlength',
+        'creationdate',
+        'getlastmodified',
+        'displayname'
+      ].contains(localName)) {
+        continue;
+      }
+
+      // Custom property found
+      final value = element.innerText;
+      if (value.isNotEmpty) {
+        final propName = namespace != null && namespace != 'DAV:'
+            ? '$namespace:$localName'
+            : localName;
+        customProps[propName] = value;
+      }
+    }
+
     return WebdavFile(
       path: decodedHref,
       isDir: isDir,
@@ -123,6 +161,7 @@ abstract final class WebdavXml {
       eTag: eTag,
       created: cTime,
       modified: mTime,
+      customProps: customProps,
     );
   }
 }
@@ -130,25 +169,25 @@ abstract final class WebdavXml {
 /// Parse HTTP date format to DateTime
 DateTime? _parseHttpDate(String? httpDate) {
   if (httpDate == null) return null;
-  
+
   try {
     final pattern = RegExp(
       r'(\w{3}), (\d{2}) (\w{3}) (\d{4}) (\d{2}):(\d{2}):(\d{2}) GMT',
       caseSensitive: false,
     );
     final match = pattern.firstMatch(httpDate);
-    
+
     if (match != null) {
       final day = match.group(2)!.padLeft(2, '0');
       final month = _monthMap[match.group(3)!.toLowerCase()];
       final year = match.group(4);
       final time = '${match.group(5)}:${match.group(6)}:${match.group(7)}';
-      
+
       if (month != null) {
         return DateTime.parse('$year-$month-${day}T${time}Z').toLocal();
       }
     }
-    
+
     // Fallback for any other formats
     return DateTime.tryParse(httpDate);
   } catch (_) {

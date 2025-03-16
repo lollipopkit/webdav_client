@@ -25,7 +25,7 @@ void main() {
   group('Basic', () {
     final client = WebdavClient(
         url: 'http://localhost:5002',
-        auth: BasicAuth(user: 'test', pwd: 'test'));
+        auth: const BasicAuth(user: 'test', pwd: 'test'));
     _testClient(client);
   });
 

@@ -7,6 +7,7 @@ class WebdavFile {
   String? eTag;
   DateTime? created;
   DateTime? modified;
+  Map<String, String> customProps;
 
   WebdavFile({
     required this.path,
@@ -17,6 +18,7 @@ class WebdavFile {
     this.eTag,
     this.created,
     this.modified,
+    this.customProps = const {},
   });
 
   @override

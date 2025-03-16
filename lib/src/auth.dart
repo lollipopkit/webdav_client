@@ -53,7 +53,7 @@ final class DigestAuth extends Auth {
   final String user;
   final String pwd;
 
-  DigestParts digestParts;
+  final DigestParts digestParts;
 
   // Track nonce count for proper digest implementation
   int _nonceCount = 0;
@@ -64,19 +64,19 @@ final class DigestAuth extends Auth {
     required this.digestParts,
   });
 
-  String? get nonce => this.digestParts.parts['nonce'];
-  String? get realm => this.digestParts.parts['realm'];
-  String? get qop => this.digestParts.parts['qop'];
-  String? get opaque => this.digestParts.parts['opaque'];
-  String? get algorithm => this.digestParts.parts['algorithm'];
-  String? get entityBody => this.digestParts.parts['entityBody'];
-  String? get charset => this.digestParts.parts['charset'];
+  String? get nonce => digestParts.parts['nonce'];
+  String? get realm => digestParts.parts['realm'];
+  String? get qop => digestParts.parts['qop'];
+  String? get opaque => digestParts.parts['opaque'];
+  String? get algorithm => digestParts.parts['algorithm'];
+  String? get entityBody => digestParts.parts['entityBody'];
+  String? get charset => digestParts.parts['charset'];
 
   @override
   String authorize(String method, String path) {
-    this.digestParts.uri = Uri.encodeFull(path);
-    this.digestParts.method = method;
-    return this._getDigestAuthorization();
+    digestParts.uri = Uri.encodeFull(path);
+    digestParts.method = method;
+    return _getDigestAuthorization();
   }
 
   String _getDigestAuthorization() {
@@ -84,15 +84,15 @@ final class DigestAuth extends Auth {
     _nonceCount++;
 
     // Format nonce count as 8 digit hex
-    String nc = _nonceCount.toString().padLeft(8, '0');
+    final nc = _nonceCount.toString().padLeft(8, '0');
 
-    String cnonce = _computeNonce();
-    String ha1 = _computeHA1(cnonce);
-    String ha2 = _computeHA2();
-    String response = _computeResponse(ha1, ha2, nc, cnonce);
+    final cnonce = _computeNonce();
+    final ha1 = _computeHA1(cnonce);
+    final ha2 = _computeHA2();
+    final response = _computeResponse(ha1, ha2, nc, cnonce);
 
     // Build authorization header according to RFC
-    StringBuffer authHeader = StringBuffer('Digest');
+    final authHeader = StringBuffer('Digest');
     _addParam(authHeader, 'username', user);
     _addParam(authHeader, 'realm', realm);
     _addParam(authHeader, 'nonce', nonce);
@@ -100,15 +100,15 @@ final class DigestAuth extends Auth {
     _addParam(authHeader, 'response', response);
 
     if (algorithm?.isNotEmpty == true) {
-      _addParam(authHeader, 'algorithm', algorithm, false);
+      _addParam(authHeader, 'algorithm', algorithm, quote: false);
     }
 
     final qop = this.qop;
     if (qop != null && qop.isNotEmpty) {
       // Choose auth over auth-int if both are offered
       String selectedQop = qop.contains('auth') ? 'auth' : qop;
-      _addParam(authHeader, 'qop', selectedQop, false);
-      _addParam(authHeader, 'nc', nc, false);
+      _addParam(authHeader, 'qop', selectedQop, quote: false);
+      _addParam(authHeader, 'nc', nc, quote: false);
       _addParam(authHeader, 'cnonce', cnonce);
     }
 
@@ -117,15 +117,19 @@ final class DigestAuth extends Auth {
     }
 
     if (charset?.isNotEmpty == true) {
-      _addParam(authHeader, 'charset', charset, false);
+      _addParam(authHeader, 'charset', charset, quote: false);
     }
 
     return authHeader.toString().trim();
   }
 
   // Helper to add parameter to the authorization header
-  void _addParam(StringBuffer sb, String name, String? value,
-      [bool quote = true]) {
+  void _addParam(
+    StringBuffer sb,
+    String name,
+    String? value, {
+    bool quote = true,
+  }) {
     if (value == null || value.isEmpty) return;
 
     if (sb.length > 7) {
@@ -142,7 +146,7 @@ final class DigestAuth extends Auth {
   }
 
   String _computeHA1(String cnonce) {
-    String? alg = this.algorithm?.toLowerCase();
+    final alg = algorithm?.toLowerCase();
 
     if (alg == null || alg == 'md5' || alg == '') {
       return _md5Hash('$user:$realm:$pwd');
@@ -152,7 +156,7 @@ final class DigestAuth extends Auth {
     } else if (alg == 'sha-256') {
       return _sha256Hash('$user:$realm:$pwd');
     } else if (alg == 'sha-256-sess') {
-      String shaStr = _sha256Hash('$user:$realm:$pwd');
+      final shaStr = _sha256Hash('$user:$realm:$pwd');
       return _sha256Hash('$shaStr:$nonce:$cnonce');
     }
 
@@ -161,24 +165,22 @@ final class DigestAuth extends Auth {
   }
 
   String _computeHA2() {
-    String? qop = this.qop;
+    final qop = this.qop;
 
     if (qop == null || qop.isEmpty || qop == 'auth') {
+      return _hashByAlgorithm('${digestParts.method}:${digestParts.uri}');
+    } else if (qop == 'auth-int' && entityBody?.isNotEmpty == true) {
+      final bodyHash = _hashByAlgorithm(entityBody!);
       return _hashByAlgorithm(
-          '${this.digestParts.method}:${this.digestParts.uri}');
-    } else if (qop == 'auth-int' && this.entityBody?.isNotEmpty == true) {
-      String bodyHash = _hashByAlgorithm(this.entityBody!);
-      return _hashByAlgorithm(
-          '${this.digestParts.method}:${this.digestParts.uri}:$bodyHash');
+          '${digestParts.method}:${digestParts.uri}:$bodyHash');
     }
 
     // Default to just method and URI
-    return _hashByAlgorithm(
-        '${this.digestParts.method}:${this.digestParts.uri}');
+    return _hashByAlgorithm('${digestParts.method}:${digestParts.uri}');
   }
 
   String _computeResponse(String ha1, String ha2, String nc, String cnonce) {
-    String? qop = this.qop;
+    final qop = this.qop;
 
     if (qop == null || qop.isEmpty) {
       return _hashByAlgorithm('$ha1:$nonce:$ha2');
@@ -188,20 +190,18 @@ final class DigestAuth extends Auth {
   }
 
   String _hashByAlgorithm(String data) {
-    String? alg = this.algorithm?.toLowerCase();
+    final alg = algorithm?.toLowerCase();
 
-    if (alg != null && (alg.startsWith('sha-256') || alg == 'sha256')) {
-      return _sha256Hash(data);
+    if (alg != null) {
+      if (alg.startsWith('sha-512') || alg == 'sha512') {
+        return _sha512Hash(data);
+      } else if (alg.startsWith('sha-256') || alg == 'sha256') {
+        return _sha256Hash(data);
+      }
     }
 
-    // Default to MD5
+    // 默认使用MD5
     return _md5Hash(data);
-  }
-
-  String _sha256Hash(String data) {
-    var bytes = utf8.encode(data);
-    var digest = crypto.sha256.convert(bytes);
-    return digest.toString();
   }
 }
 
@@ -249,13 +249,25 @@ class DigestParts {
 }
 
 String _md5Hash(String data) {
-  final hasher = new MD5()..add(Utf8Encoder().convert(data));
-  var bytes = hasher.close();
-  var result = new StringBuffer();
-  for (var part in bytes) {
+  final hasher = MD5()..add(const Utf8Encoder().convert(data));
+  final bytes = hasher.close();
+  final result = StringBuffer();
+  for (final part in bytes) {
     result.write('${part < 16 ? '0' : ''}${part.toRadixString(16)}');
   }
   return result.toString();
+}
+
+String _sha256Hash(String data) {
+  final bytes = utf8.encode(data);
+  final digest = crypto.sha256.convert(bytes);
+  return digest.toString();
+}
+
+String _sha512Hash(String data) {
+  final bytes = utf8.encode(data);
+  final digest = crypto.sha512.convert(bytes);
+  return digest.toString();
 }
 
 String _computeNonce() {
