@@ -1,7 +1,5 @@
 import 'dart:convert';
-import 'dart:math';
-import 'package:convert/convert.dart';
-import 'package:crypto/crypto.dart' as crypto;
+import 'package:webdav_client_plus/src/utils.dart';
 
 /// Auth for WebDAV client
 sealed class Auth {
@@ -85,7 +83,7 @@ final class DigestAuth extends Auth {
     // Format nonce count as 8 digit hex
     final nc = _nonceCount.toString().padLeft(8, '0');
 
-    final cnonce = _computeNonce();
+    final cnonce = computeNonce();
     final ha1 = _computeHA1(cnonce);
     final ha2 = _computeHA2();
     final response = _computeResponse(ha1, ha2, nc, cnonce);
@@ -148,19 +146,19 @@ final class DigestAuth extends Auth {
     final alg = algorithm?.toLowerCase();
 
     if (alg == null || alg == 'md5' || alg == '') {
-      return _md5Hash('$user:$realm:$pwd');
+      return md5Hash('$user:$realm:$pwd');
     } else if (alg == 'md5-sess') {
-      String md5Str = _md5Hash('$user:$realm:$pwd');
-      return _md5Hash('$md5Str:$nonce:$cnonce');
+      String md5Str = md5Hash('$user:$realm:$pwd');
+      return md5Hash('$md5Str:$nonce:$cnonce');
     } else if (alg == 'sha-256') {
-      return _sha256Hash('$user:$realm:$pwd');
+      return sha256Hash('$user:$realm:$pwd');
     } else if (alg == 'sha-256-sess') {
-      final shaStr = _sha256Hash('$user:$realm:$pwd');
-      return _sha256Hash('$shaStr:$nonce:$cnonce');
+      final shaStr = sha256Hash('$user:$realm:$pwd');
+      return sha256Hash('$shaStr:$nonce:$cnonce');
     }
 
     // Default to MD5 if algorithm not recognized
-    return _md5Hash('$user:$realm:$pwd');
+    return md5Hash('$user:$realm:$pwd');
   }
 
   String _computeHA2() {
@@ -193,14 +191,13 @@ final class DigestAuth extends Auth {
 
     if (alg != null) {
       if (alg.startsWith('sha-512') || alg == 'sha512') {
-        return _sha512Hash(data);
+        return sha512Hash(data);
       } else if (alg.startsWith('sha-256') || alg == 'sha256') {
-        return _sha256Hash(data);
+        return sha256Hash(data);
       }
     }
 
-    // 默认使用MD5
-    return _md5Hash(data);
+    return md5Hash(data);
   }
 }
 
@@ -245,27 +242,4 @@ class DigestParts {
       parts[key] = value.trim();
     }
   }
-}
-
-String _md5Hash(String data) {
-  final digest = crypto.md5.convert(utf8.encode(data));
-  return hex.encode(digest.bytes);
-}
-
-String _sha256Hash(String data) {
-  final bytes = utf8.encode(data);
-  final digest = crypto.sha256.convert(bytes);
-  return digest.toString();
-}
-
-String _sha512Hash(String data) {
-  final bytes = utf8.encode(data);
-  final digest = crypto.sha512.convert(bytes);
-  return digest.toString();
-}
-
-String _computeNonce() {
-  final rnd = Random.secure();
-  final values = List<int>.generate(16, (i) => rnd.nextInt(256));
-  return hex.encode(values).substring(0, 16);
 }

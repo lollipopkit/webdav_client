@@ -6,16 +6,13 @@ class _WdDio with DioMixin implements Dio {
 
   _WdDio({BaseOptions? options}) {
     this.options = options ?? BaseOptions();
-    // 禁止重定向
     this.options.followRedirects = false;
 
-    // 状态码错误视为成功
     this.options.validateStatus = (status) => true;
 
     httpClientAdapter = getAdapter();
   }
 
-  // methods-------------------------
   Future<Response> req(
     WebdavClient self,
     String method,
@@ -30,7 +27,6 @@ class _WdDio with DioMixin implements Dio {
     final options = Options(method: method);
     options.headers ??= {};
 
-    // 二次处理options
     if (optionsHandler != null) {
       optionsHandler(options);
     }
@@ -67,7 +63,7 @@ class _WdDio with DioMixin implements Dio {
               digestParts: DigestParts(w3AHeader),
             );
 
-            // 重试请求
+            // Retry the request
             return req(
               self,
               method,
@@ -141,7 +137,7 @@ class _WdDio with DioMixin implements Dio {
   Future<Response> wdPropfind(
     WebdavClient self,
     String path,
-    ReadPropsDepth depth,
+    PropsDepth depth,
     String dataStr, {
     CancelToken? cancelToken,
   }) async {
@@ -185,7 +181,8 @@ class _WdDio with DioMixin implements Dio {
       {CancelToken? cancelToken}) async {
     final method = isCopy == true ? 'COPY' : 'MOVE';
     final resp = await req(self, method, oldPath, optionsHandler: (options) {
-      options.headers?['destination'] = Uri.encodeFull(joinPath(self.url, newPath));
+      options.headers?['destination'] =
+          Uri.encodeFull(joinPath(self.url, newPath));
       options.headers?['overwrite'] = overwrite == true ? 'T' : 'F';
     }, cancelToken: cancelToken);
 
@@ -462,8 +459,7 @@ class _WdDio with DioMixin implements Dio {
     void Function(int count, int total)? onProgress,
     CancelToken? cancelToken,
   }) async {
-    // fix auth error
-    var pResp = await wdOptions(self, path, cancelToken: cancelToken);
+    final pResp = await wdOptions(self, path, cancelToken: cancelToken);
     if (pResp.statusCode != 200) {
       throw _newResponseError(pResp);
     }
@@ -471,11 +467,11 @@ class _WdDio with DioMixin implements Dio {
     // mkdir
     await _createParent(self, path, cancelToken: cancelToken);
 
-    var resp = await req(
+    final resp = await req(
       self,
       'PUT',
       path,
-      data: Stream.fromIterable(data.map((e) => [e])),
+      data: data,
       optionsHandler: (options) {
         options.headers?['content-length'] = data.length;
 
@@ -486,7 +482,8 @@ class _WdDio with DioMixin implements Dio {
       onSendProgress: onProgress,
       cancelToken: cancelToken,
     );
-    var status = resp.statusCode;
+
+    final status = resp.statusCode;
     if (status == 200 || status == 201 || status == 204) {
       return;
     }
@@ -535,7 +532,7 @@ class _WdDio with DioMixin implements Dio {
     String path,
     String dataStr, {
     int timeout = 3600,
-    ReadPropsDepth depth = ReadPropsDepth.infinity,
+    PropsDepth depth = PropsDepth.infinity,
     CancelToken? cancelToken,
   }) async {
     var resp = await req(

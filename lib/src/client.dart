@@ -86,7 +86,7 @@ class WebdavClient {
   /// Read all files in a folder
   Future<List<WebdavFile>> readDir(
     String path, {
-    ReadPropsDepth depth = ReadPropsDepth.one,
+    PropsDepth depth = PropsDepth.one,
     CancelToken? cancelToken,
   }) async {
     path = _fixCollectionPath(path);
@@ -108,7 +108,7 @@ class WebdavClient {
     final resp = await _client.wdPropfind(
       this,
       path,
-      ReadPropsDepth.zero,
+      PropsDepth.zero,
       fileXmlStr,
       cancelToken: cancelToken,
     );
@@ -300,7 +300,7 @@ class WebdavClient {
     bool exclusive = true,
     int timeout = 3600,
     String? owner,
-    ReadPropsDepth depth = ReadPropsDepth.infinity,
+    PropsDepth depth = PropsDepth.infinity,
     CancelToken? cancelToken,
   }) async {
     final xmlBuilder = XmlBuilder();
@@ -417,7 +417,7 @@ class WebdavClient {
       }
 
       if (etag != null) {
-        resourceConditions.add('([$etag])');
+        resourceConditions.add('(["$etag"])');
       }
 
       if (taggedList.isNotEmpty) {
@@ -456,6 +456,24 @@ class WebdavClient {
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:propertyupdate', nest: () {
       xmlBuilder.namespace('d', 'DAV:');
+      
+      // Add common namespace declarations for all custom properties
+      final allProps = <String>{};
+      if (setProps != null) allProps.addAll(setProps.keys);
+      if (removeProps != null) allProps.addAll(removeProps);
+      
+      final namespaces = <String>{};
+      for (final prop in allProps) {
+        final parts = prop.split(':');
+        if (parts.length == 2 && parts[0] != 'd') {
+          namespaces.add(parts[0]);
+        }
+      }
+      
+      // Register all namespaces at the root level
+      for (final ns in namespaces) {
+        xmlBuilder.namespace(ns, 'http://example.com/ns/$ns');
+      }
 
       // Set properties
       if (setProps != null && setProps.isNotEmpty) {
@@ -466,10 +484,6 @@ class WebdavClient {
               if (parts.length == 2) {
                 final prefix = parts[0];
                 final propName = parts[1];
-                // Add namespace declaration for non-DAV namespaces
-                if (prefix != 'd') {
-                  xmlBuilder.namespace(prefix, 'http://example.com/ns/$prefix');
-                }
                 xmlBuilder.element('$prefix:$propName', nest: value);
               } else {
                 xmlBuilder.element('d:$key', nest: value);
@@ -488,10 +502,6 @@ class WebdavClient {
               if (parts.length == 2) {
                 final prefix = parts[0];
                 final propName = parts[1];
-                // Add namespace declaration for non-DAV namespaces
-                if (prefix != 'd') {
-                  xmlBuilder.namespace(prefix, 'http://example.com/ns/$prefix');
-                }
                 xmlBuilder.element('$prefix:$propName');
               } else {
                 xmlBuilder.element('d:$key');
@@ -522,8 +532,18 @@ class WebdavClient {
             // Check non-200 status codes
             if (!statusText.contains('200') && !statusText.contains('204')) {
               final href = WebdavXml.getElementText(response, 'href') ?? '';
+              
+              // Get the prop names that failed for better error messages
+              final failedProps = <String>[];
+              final propElement = WebdavXml.findElements(propstat, 'prop').firstOrNull;
+              if (propElement != null) {
+                for (var prop in propElement.childElements) {
+                  failedProps.add(prop.name.qualified);
+                }
+              }
+              
               throw WebdavException(
-                message: 'Failed to update properties for $href: $statusText',
+                message: 'Failed to update properties for $href: $statusText. Failed props: $failedProps',
                 statusCode: 422,
               );
             }

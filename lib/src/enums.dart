@@ -1,4 +1,4 @@
-enum ReadPropsDepth {
+enum PropsDepth {
   zero,
   one,
   infinity,
