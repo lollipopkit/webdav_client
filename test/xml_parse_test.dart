@@ -1,9 +1,9 @@
 import 'package:test/test.dart';
-import 'package:webdav_client_plus/src/xml.dart';
+import 'package:webdav_client_plus/webdav_client_plus.dart';
 
 void main() {
   test('propfind', () {
-    final files = WebdavXml.toFiles('/', _propFindRaw);
+    final files = WebdavFile.parseFiles('/', _propFindRaw);
     expect(files.length, 1);
     final first = files[0];
     expect(first.path, '/test dir/README.md');

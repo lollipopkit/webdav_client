@@ -3,6 +3,31 @@ import 'dart:math';
 
 import 'package:convert/convert.dart';
 import 'package:crypto/crypto.dart' as crypto;
+import 'package:xml/xml.dart';
+
+/// XML
+
+List<XmlElement> findAllElements(XmlDocument document, String tag) =>
+    document.findAllElements(tag, namespace: '*').toList();
+
+List<XmlElement> findElements(XmlElement element, String tag) =>
+    element.findElements(tag, namespace: '*').toList();
+
+/// Extract a string value from the first matching element
+String? getElementText(XmlElement parent, String tag) =>
+    findElements(parent, tag).firstOrNull?.innerText;
+
+/// Extract an integer value from the first matching element
+int? getIntValue(XmlElement parent, String tag) {
+  final value = getElementText(parent, tag);
+  return value != null ? int.tryParse(value) : null;
+}
+
+/// Check if element contains a specific child element
+bool hasElement(XmlElement parent, String childTag) =>
+    findElements(parent, childTag).isNotEmpty;
+
+/// PATH
 
 String joinPath(String path0, String path1) {
   while (path0.isNotEmpty && path0.endsWith('/')) {
@@ -24,6 +49,7 @@ String joinPath(String path0, String path1) {
           : '$path0/$path1';
 }
 
+/// HASH
 
 String md5Hash(String data) {
   final digest = crypto.md5.convert(utf8.encode(data));
@@ -47,6 +73,8 @@ String computeNonce() {
   final values = List<int>.generate(16, (i) => rnd.nextInt(256));
   return hex.encode(values).substring(0, 16);
 }
+
+/// EXT
 
 extension IterX<T> on Iterable<T> {
   T? firstWhereOrNull(bool Function(T) test) {

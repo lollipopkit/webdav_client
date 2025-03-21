@@ -11,7 +11,6 @@ import 'package:webdav_client_plus/src/auth.dart';
 import 'package:webdav_client_plus/src/enums.dart';
 import 'package:webdav_client_plus/src/file.dart';
 import 'package:webdav_client_plus/src/utils.dart';
-import 'package:webdav_client_plus/src/xml.dart';
 import 'package:xml/xml.dart';
 
 part 'dio.dart';
@@ -78,10 +77,43 @@ class WebdavClient {
     }
   }
 
-  // Future<void> getQuota([CancelToken cancelToken]) async {
-  //   var resp = await c.wdQuota(this, quotaXmlStr, cancelToken: cancelToken);
-  //   print(resp);
-  // }
+  Future<(double percent, String size)> quota(
+      {CancelToken? cancelToken}) async {
+    final resp = await _client.wdPropfind(
+      this,
+      '/',
+      PropsDepth.zero,
+      PropfindType.prop.buildXmlStr([
+        'quota-available-bytes',
+        'quota-used-bytes',
+      ]),
+      cancelToken: cancelToken,
+    );
+
+    final str = resp.data as String;
+    final file = WebdavFile.parseFiles('/', str, skipSelf: false).firstOrNull;
+    if (file == null) {
+      throw WebdavException(
+        message: 'Quota not found',
+        statusCode: 404,
+      );
+    }
+
+    final quotaAvailable = file.quotaAvailableBytes;
+    final quotaUsed = file.quotaUsedBytes;
+    if (quotaAvailable == null || quotaUsed == null) {
+      throw WebdavException(
+        message: 'Quota not found',
+        statusCode: 404,
+      );
+    }
+
+    final percent = quotaUsed / quotaAvailable;
+    return (
+      percent,
+      '${quotaUsed / 1024 / 1024}M/${quotaAvailable / 1024 / 1024}M'
+    );
+  }
 
   /// Read all files in a folder
   Future<List<WebdavFile>> readDir(
@@ -104,7 +136,7 @@ class WebdavClient {
     );
 
     final str = resp.data as String;
-    return WebdavXml.toFiles(path, str);
+    return WebdavFile.parseFiles(path, str);
   }
 
   /// Read a single files properties
@@ -127,7 +159,7 @@ class WebdavClient {
     );
 
     final str = resp.data as String;
-    return WebdavXml.toFiles(path, str, skipSelf: false).firstOrNull;
+    return WebdavFile.parseFiles(path, str, skipSelf: false).firstOrNull;
   }
 
   /// Create a folder
@@ -565,24 +597,21 @@ class WebdavClient {
     // Check if any properties failed to update
     if (resp.statusCode == 207) {
       final xmlDocument = XmlDocument.parse(resp.data as String);
-      final responseElements =
-          WebdavXml.findAllElements(xmlDocument, 'response');
+      final responseElements = findAllElements(xmlDocument, 'response');
 
       for (final response in responseElements) {
-        final propstatElements = WebdavXml.findElements(response, 'propstat');
+        final propstatElements = findElements(response, 'propstat');
         for (final propstat in propstatElements) {
-          final statusElement =
-              WebdavXml.findElements(propstat, 'status').firstOrNull;
+          final statusElement = findElements(propstat, 'status').firstOrNull;
           if (statusElement != null) {
             final statusText = statusElement.innerText;
             // Check non-200 status codes
             if (!statusText.contains('200') && !statusText.contains('204')) {
-              final href = WebdavXml.getElementText(response, 'href') ?? '';
+              final href = getElementText(response, 'href') ?? '';
 
               // Get the prop names that failed for better error messages
               final failedProps = <String>[];
-              final propElement =
-                  WebdavXml.findElements(propstat, 'prop').firstOrNull;
+              final propElement = findElements(propstat, 'prop').firstOrNull;
               if (propElement != null) {
                 for (var prop in propElement.childElements) {
                   failedProps.add(prop.name.qualified);
