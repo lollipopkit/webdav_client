@@ -15,7 +15,7 @@ class WebdavException<T> implements Exception {
 
   @override
   String toString() {
-    return 'WebdavException: $message (Status: ${statusCode ?? "unknown"} ${statusMessage ?? ""})';
+    return 'WebdavException: $message (Status: ${statusCode ?? "unknown"} ${statusMessage ?? ""}):\n${response?.data}';
   }
 
   factory WebdavException.fromResponse(

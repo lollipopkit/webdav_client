@@ -522,7 +522,7 @@ class WebdavClient {
     await _client.wdWriteWithBytes(
       path,
       data,
-      additionalHeaders: headers,
+      additionalHeaders: requestHeaders,
       onProgress: onProgress,
       cancelToken: cancelToken,
     );
