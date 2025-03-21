@@ -1,10 +1,9 @@
 part of 'client.dart';
 
-class _WdDio with DioMixin implements Dio {
-  // // Request config
-  // BaseOptions? baseOptions;
+class _WdDio with DioMixin {
+  final WebdavClient client;
 
-  _WdDio({BaseOptions? options}) {
+  _WdDio({required this.client, BaseOptions? options}) {
     this.options = options ?? BaseOptions();
     this.options.followRedirects = false;
 
@@ -14,7 +13,6 @@ class _WdDio with DioMixin implements Dio {
   }
 
   Future<Response> req(
-    WebdavClient self,
     String method,
     String path, {
     dynamic data,
@@ -32,7 +30,7 @@ class _WdDio with DioMixin implements Dio {
     }
 
     // authorization
-    final authStr = self.auth.authorize(method, path);
+    final authStr = client.auth.authorize(method, path);
     if (authStr != null) {
       options.headers?['authorization'] = authStr;
     }
@@ -40,7 +38,7 @@ class _WdDio with DioMixin implements Dio {
     final resp = await requestUri(
       Uri.parse(path.startsWith(RegExp(r'(http|https)://'))
           ? path
-          : joinPath(self.url, path)),
+          : joinPath(client.url, path)),
       options: options,
       data: data,
       onSendProgress: onSendProgress,
@@ -52,7 +50,7 @@ class _WdDio with DioMixin implements Dio {
       final w3AHeaders = resp.headers[Headers.wwwAuthenticateHeader];
 
       if (w3AHeaders != null && w3AHeaders.isNotEmpty) {
-        switch (self.auth) {
+        switch (client.auth) {
           case final DigestAuth digestAuth:
             // Find the digest challenge header
             final digestHeader = w3AHeaders.firstWhereOrNull(
@@ -60,7 +58,7 @@ class _WdDio with DioMixin implements Dio {
             );
             if (digestHeader != null) {
               // Create a new DigestAuth instance with the new challenge
-              self.auth = DigestAuth(
+              client.auth = DigestAuth(
                 user: digestAuth.user,
                 pwd: digestAuth.pwd,
                 digestParts: DigestParts(digestHeader),
@@ -68,7 +66,6 @@ class _WdDio with DioMixin implements Dio {
 
               // Retry the request
               return req(
-                self,
                 method,
                 path,
                 data: data,
@@ -140,7 +137,6 @@ class _WdDio with DioMixin implements Dio {
           String redirectPath = list[0];
           // retry
           return req(
-            self,
             method,
             redirectPath,
             data: data,
@@ -158,12 +154,10 @@ class _WdDio with DioMixin implements Dio {
 
   // OPTIONS
   Future<Response<void>> wdOptions(
-    WebdavClient self,
     String path, {
     CancelToken? cancelToken,
   }) {
     return req(
-      self,
       'OPTIONS',
       path,
       optionsHandler: (options) => options.headers?['depth'] = '0',
@@ -183,14 +177,12 @@ class _WdDio with DioMixin implements Dio {
 
   // PROPFIND
   Future<Response> wdPropfind(
-    WebdavClient self,
     String path,
     PropsDepth depth,
     String dataStr, {
     CancelToken? cancelToken,
   }) async {
     var resp = await req(
-      self,
       'PROPFIND',
       path,
       data: dataStr,
@@ -212,20 +204,17 @@ class _WdDio with DioMixin implements Dio {
   }
 
   /// MKCOL
-  Future<Response<void>> wdMkcol(WebdavClient self, String path,
-      {CancelToken? cancelToken}) {
-    return req(self, 'MKCOL', path, cancelToken: cancelToken);
+  Future<Response<void>> wdMkcol(String path, {CancelToken? cancelToken}) {
+    return req('MKCOL', path, cancelToken: cancelToken);
   }
 
   /// DELETE
-  Future<Response<void>> wdDelete(WebdavClient self, String path,
-      {CancelToken? cancelToken}) {
-    return req(self, 'DELETE', path, cancelToken: cancelToken);
+  Future<Response<void>> wdDelete(String path, {CancelToken? cancelToken}) {
+    return req('DELETE', path, cancelToken: cancelToken);
   }
 
   /// COPY OR MOVE
   Future<void> wdCopyMove(
-    WebdavClient self,
     String oldPath,
     String newPath,
     bool isCopy,
@@ -235,12 +224,11 @@ class _WdDio with DioMixin implements Dio {
   }) async {
     final method = isCopy == true ? 'COPY' : 'MOVE';
     final resp = await req(
-      self,
       method,
       oldPath,
       optionsHandler: (options) {
         options.headers?['destination'] =
-            Uri.encodeFull(joinPath(self.url, newPath));
+            Uri.encodeFull(joinPath(client.url, newPath));
         options.headers?['overwrite'] = overwrite == true ? 'T' : 'F';
         options.headers?['depth'] = depth.value;
       },
@@ -266,8 +254,8 @@ class _WdDio with DioMixin implements Dio {
       // Otherwise, operation was successful enough to proceed
       return;
     } else if (status == 409) {
-      await _createParent(self, newPath, cancelToken: cancelToken);
-      return wdCopyMove(self, oldPath, newPath, isCopy, overwrite,
+      await _createParent(newPath, cancelToken: cancelToken);
+      return wdCopyMove(oldPath, newPath, isCopy, overwrite,
           cancelToken: cancelToken);
     } else {
       throw _newResponseError(resp);
@@ -276,19 +264,17 @@ class _WdDio with DioMixin implements Dio {
 
   /// read a file with bytes
   Future<List<int>> wdReadWithBytes(
-    WebdavClient self,
     String path, {
     void Function(int count, int total)? onProgress,
     CancelToken? cancelToken,
   }) async {
     // fix auth error
-    var pResp = await wdOptions(self, path, cancelToken: cancelToken);
+    var pResp = await wdOptions(path, cancelToken: cancelToken);
     if (pResp.statusCode != 200) {
       throw _newResponseError(pResp);
     }
 
     var resp = await req(
-      self,
       'GET',
       path,
       optionsHandler: (options) => options.responseType = ResponseType.bytes,
@@ -302,7 +288,6 @@ class _WdDio with DioMixin implements Dio {
         final locationHeaders = resp.headers['location'];
         if (locationHeaders != null && locationHeaders.isNotEmpty) {
           final ret = await req(
-            self,
             'GET',
             locationHeaders.first,
             optionsHandler: (options) =>
@@ -327,14 +312,13 @@ class _WdDio with DioMixin implements Dio {
 
   /// read a file with stream
   Future<void> wdReadWithStream(
-    WebdavClient self,
     String path,
     String savePath, {
     void Function(int count, int total)? onProgress,
     CancelToken? cancelToken,
   }) async {
     // fix auth error
-    var pResp = await wdOptions(self, path, cancelToken: cancelToken);
+    var pResp = await wdOptions(path, cancelToken: cancelToken);
     if (pResp.statusCode != 200) {
       throw _newResponseError(pResp);
     }
@@ -345,7 +329,6 @@ class _WdDio with DioMixin implements Dio {
     // request
     try {
       final ret = await req(
-        self,
         'GET',
         path,
         optionsHandler: (options) => options.responseType = ResponseType.stream,
@@ -502,23 +485,21 @@ class _WdDio with DioMixin implements Dio {
 
   /// write a file with bytes
   Future<void> wdWriteWithBytes(
-    WebdavClient self,
     String path,
     Uint8List data, {
     Map<String, dynamic>? additionalHeaders,
     void Function(int count, int total)? onProgress,
     CancelToken? cancelToken,
   }) async {
-    final pResp = await wdOptions(self, path, cancelToken: cancelToken);
+    final pResp = await wdOptions(path, cancelToken: cancelToken);
     if (pResp.statusCode != 200) {
       throw _newResponseError(pResp);
     }
 
     // mkdir
-    await _createParent(self, path, cancelToken: cancelToken);
+    await _createParent(path, cancelToken: cancelToken);
 
     final resp = await req(
-      self,
       'PUT',
       path,
       data: data,
@@ -542,7 +523,6 @@ class _WdDio with DioMixin implements Dio {
 
   /// write a file with stream
   Future<void> wdWriteWithStream(
-    WebdavClient self,
     String path,
     Stream<List<int>> data,
     int length, {
@@ -550,16 +530,15 @@ class _WdDio with DioMixin implements Dio {
     CancelToken? cancelToken,
   }) async {
     // fix auth error
-    var pResp = await wdOptions(self, path, cancelToken: cancelToken);
+    final pResp = await wdOptions(path, cancelToken: cancelToken);
     if (pResp.statusCode != 200) {
       throw _newResponseError(pResp);
     }
 
     // mkdir
-    await _createParent(self, path, cancelToken: cancelToken);
+    await _createParent(path, cancelToken: cancelToken);
 
-    var resp = await req(
-      self,
+    final resp = await req(
       'PUT',
       path,
       data: data,
@@ -570,7 +549,7 @@ class _WdDio with DioMixin implements Dio {
       onSendProgress: onProgress,
       cancelToken: cancelToken,
     );
-    var status = resp.statusCode;
+    final status = resp.statusCode;
     if (status == 200 || status == 201 || status == 204) {
       return;
     }
@@ -578,7 +557,6 @@ class _WdDio with DioMixin implements Dio {
   }
 
   Future<Response> wdLock(
-    WebdavClient self,
     String path,
     String? dataStr, {
     int timeout = 3600,
@@ -586,8 +564,7 @@ class _WdDio with DioMixin implements Dio {
     String? ifHeader,
     CancelToken? cancelToken,
   }) async {
-    var resp = await req(
-      self,
+    final resp = await req(
       'LOCK',
       path,
       data: dataStr,
@@ -614,16 +591,15 @@ class _WdDio with DioMixin implements Dio {
   }
 
   Future<Response<void>> wdUnlock(
-    WebdavClient self,
     String path,
     String lockToken, {
     CancelToken? cancelToken,
   }) async {
-    var resp = await req(self, 'UNLOCK', path, optionsHandler: (options) {
+    final resp = await req('UNLOCK', path, optionsHandler: (options) {
       options.headers?['Lock-Token'] = '<$lockToken>';
     }, cancelToken: cancelToken);
 
-    var status = resp.statusCode;
+    final status = resp.statusCode;
     if (status != 204 && status != 200) {
       throw _newResponseError(resp);
     }
@@ -632,13 +608,11 @@ class _WdDio with DioMixin implements Dio {
   }
 
   Future<Response> wdProppatch(
-    WebdavClient self,
     String path,
     String dataStr, {
     CancelToken? cancelToken,
   }) async {
-    var resp = await req(
-      self,
+    final resp = await req(
       'PROPPATCH',
       path,
       data: dataStr,
@@ -669,13 +643,12 @@ extension on _WdDio {
   }
 
   /// create parent folder
-  Future<void>? _createParent(WebdavClient self, String path,
-      {CancelToken? cancelToken}) {
-    var parentPath = path.substring(0, path.lastIndexOf('/') + 1);
+  Future<void>? _createParent(String path, {CancelToken? cancelToken}) {
+    final parentPath = path.substring(0, path.lastIndexOf('/') + 1);
 
     if (parentPath == '' || parentPath == '/') {
       return null;
     }
-    return self.mkdirAll(parentPath, cancelToken);
+    return client.mkdirAll(parentPath, cancelToken);
   }
 }

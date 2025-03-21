@@ -22,7 +22,7 @@ class WebdavClient {
   final String url;
 
   /// Wrapped http client
-  final _client = _WdDio();
+  late final _client = _WdDio(client: this);
 
   /// Auth Mode (noAuth/basic/digest/bearer)
   Auth auth;
@@ -71,7 +71,7 @@ class WebdavClient {
 
   /// Test whether the service can connect
   Future<void> ping([CancelToken? cancelToken]) async {
-    var resp = await _client.wdOptions(this, '/', cancelToken: cancelToken);
+    var resp = await _client.wdOptions('/', cancelToken: cancelToken);
     if (resp.statusCode != 200) {
       throw _newResponseError(resp);
     }
@@ -80,7 +80,6 @@ class WebdavClient {
   Future<(double percent, String size)> quota(
       {CancelToken? cancelToken}) async {
     final resp = await _client.wdPropfind(
-      this,
       '/',
       PropsDepth.zero,
       PropfindType.prop.buildXmlStr([
@@ -128,7 +127,6 @@ class WebdavClient {
     final xmlStr = findType.buildXmlStr(properties);
 
     final resp = await _client.wdPropfind(
-      this,
       path,
       depth,
       xmlStr,
@@ -151,7 +149,6 @@ class WebdavClient {
     final xmlStr = findType.buildXmlStr(properties);
 
     final resp = await _client.wdPropfind(
-      this,
       path,
       PropsDepth.zero,
       xmlStr,
@@ -165,7 +162,7 @@ class WebdavClient {
   /// Create a folder
   Future<void> mkdir(String path, [CancelToken? cancelToken]) async {
     path = _fixCollectionPath(path);
-    var resp = await _client.wdMkcol(this, path, cancelToken: cancelToken);
+    var resp = await _client.wdMkcol(path, cancelToken: cancelToken);
     var status = resp.statusCode;
     if (status != 201 && status != 405) {
       throw _newResponseError(resp);
@@ -175,7 +172,7 @@ class WebdavClient {
   /// Recursively create folders
   Future<void> mkdirAll(String path, [CancelToken? cancelToken]) async {
     path = _fixCollectionPath(path);
-    var resp = await _client.wdMkcol(this, path, cancelToken: cancelToken);
+    var resp = await _client.wdMkcol(path, cancelToken: cancelToken);
     var status = resp.statusCode;
     if (status == 201 || status == 405) {
       return;
@@ -187,7 +184,7 @@ class WebdavClient {
           continue;
         }
         sub += '$e/';
-        resp = await _client.wdMkcol(this, sub, cancelToken: cancelToken);
+        resp = await _client.wdMkcol(sub, cancelToken: cancelToken);
         status = resp.statusCode;
         if (status != 201 && status != 405) {
           throw _newResponseError(resp);
@@ -206,7 +203,7 @@ class WebdavClient {
 
   /// Remove files
   Future<void> removeAll(String path, [CancelToken? cancelToken]) async {
-    final resp = await _client.wdDelete(this, path, cancelToken: cancelToken);
+    final resp = await _client.wdDelete(path, cancelToken: cancelToken);
     if (resp.statusCode == 200 ||
         resp.statusCode == 204 ||
         resp.statusCode == 404) {
@@ -240,7 +237,6 @@ class WebdavClient {
     }
 
     return _client.wdCopyMove(
-      this,
       oldPath,
       newPath,
       false,
@@ -283,7 +279,6 @@ class WebdavClient {
     CancelToken? cancelToken,
   }) {
     return _client.wdCopyMove(
-      this,
       oldPath,
       newPath,
       true,
@@ -300,7 +295,6 @@ class WebdavClient {
     CancelToken? cancelToken,
   }) {
     return _client.wdReadWithBytes(
-      this,
       path,
       onProgress: onProgress,
       cancelToken: cancelToken,
@@ -315,7 +309,6 @@ class WebdavClient {
     CancelToken? cancelToken,
   }) async {
     await _client.wdReadWithStream(
-      this,
       remotePath,
       localPath,
       onProgress: onProgress,
@@ -331,7 +324,6 @@ class WebdavClient {
     CancelToken? cancelToken,
   }) {
     return _client.wdWriteWithBytes(
-      this,
       path,
       data,
       onProgress: onProgress,
@@ -348,7 +340,6 @@ class WebdavClient {
   }) async {
     var file = io.File(localPath);
     return _client.wdWriteWithStream(
-      this,
       remotePath,
       file.openRead(),
       file.lengthSync(),
@@ -405,7 +396,6 @@ class WebdavClient {
       }
 
       final resp = await _client.wdLock(
-        this,
         path,
         null, // Empty body for lock refresh
         depth: depth,
@@ -449,7 +439,6 @@ class WebdavClient {
 
     final xmlString = xmlBuilder.buildDocument().toString();
     final resp = await _client.wdLock(
-      this,
       path,
       xmlString,
       depth: depth,
@@ -471,7 +460,7 @@ class WebdavClient {
   /// Unlock a resource
   Future<void> unlock(String path, String lockToken,
       [CancelToken? cancelToken]) async {
-    await _client.wdUnlock(this, path, lockToken, cancelToken: cancelToken);
+    await _client.wdUnlock(path, lockToken, cancelToken: cancelToken);
   }
 
   /// Set properties of a resource
@@ -504,7 +493,7 @@ class WebdavClient {
     });
 
     final xmlString = xmlBuilder.buildDocument().toString();
-    await _client.wdProppatch(this, path, xmlString, cancelToken: cancelToken);
+    await _client.wdProppatch(path, xmlString, cancelToken: cancelToken);
   }
 
   /// Put a resource according to the conditions
@@ -531,7 +520,6 @@ class WebdavClient {
     }
 
     await _client.wdWriteWithBytes(
-      this,
       path,
       data,
       additionalHeaders: headers,
@@ -612,8 +600,11 @@ class WebdavClient {
     });
 
     final xmlString = xmlBuilder.buildDocument().toString();
-    final resp = await _client.wdProppatch(this, path, xmlString,
-        cancelToken: cancelToken);
+    final resp = await _client.wdProppatch(
+      path,
+      xmlString,
+      cancelToken: cancelToken,
+    );
 
     // Check if any properties failed to update
     if (resp.statusCode == 207) {
