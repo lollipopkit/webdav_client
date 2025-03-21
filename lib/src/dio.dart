@@ -49,38 +49,84 @@ class _WdDio with DioMixin implements Dio {
     );
 
     if (resp.statusCode == 401) {
-      final w3AHeader = resp.headers.value('www-authenticate');
-      final lowerW3AHeader = w3AHeader?.toLowerCase();
+      final w3AHeaders = resp.headers[Headers.wwwAuthenticateHeader];
 
-      switch (self.auth) {
-        case final DigestAuth digestAuth:
-          final isDigestChallenge = lowerW3AHeader?.contains('digest') == true;
-          if (isDigestChallenge) {
-            // Create a new DigestAuth instance with the new challenge
-            self.auth = DigestAuth(
-              user: digestAuth.user,
-              pwd: digestAuth.pwd,
-              digestParts: DigestParts(w3AHeader),
+      if (w3AHeaders != null && w3AHeaders.isNotEmpty) {
+        switch (self.auth) {
+          case final DigestAuth digestAuth:
+            // Find the digest challenge header
+            final digestHeader = w3AHeaders.firstWhereOrNull(
+              (header) => header.toLowerCase().contains('digest'),
             );
+            if (digestHeader != null) {
+              // Create a new DigestAuth instance with the new challenge
+              self.auth = DigestAuth(
+                user: digestAuth.user,
+                pwd: digestAuth.pwd,
+                digestParts: DigestParts(digestHeader),
+              );
 
-            // Retry the request
-            return req(
-              self,
-              method,
-              path,
-              data: data,
-              optionsHandler: optionsHandler,
-              onSendProgress: onSendProgress,
-              onReceiveProgress: onReceiveProgress,
-              cancelToken: cancelToken,
+              // Retry the request
+              return req(
+                self,
+                method,
+                path,
+                data: data,
+                optionsHandler: optionsHandler,
+                onSendProgress: onSendProgress,
+                onReceiveProgress: onReceiveProgress,
+                cancelToken: cancelToken,
+              );
+            }
+            break;
+          case final BasicAuth _:
+            // Check if the server supports Basic auth
+            final basicHeader = w3AHeaders.firstWhereOrNull(
+              (header) => header.toLowerCase().contains('basic'),
             );
-          }
-          break;
-        case final BasicAuth _:
-        case final NoAuth _:
-        case final BearerAuth _:
-          // TODO: handle this case
-          break;
+            if (basicHeader != null) {
+              throw WebdavException(
+                message: 'Basic Auth failed, maybe invalid username or password',
+                statusCode: 401,
+                response: resp,
+              );
+            } else {
+              // Server does not support Basic auth
+              final authType = _extractAuthType(w3AHeaders.first);
+              throw WebdavException(
+                message: 'Basic Auth failed, server requires $authType auth',
+                statusCode: 401,
+                response: resp,
+              );
+            }
+
+          case final BearerAuth _:
+            final bearerHeader = w3AHeaders.firstWhereOrNull(
+              (header) => header.toLowerCase().contains('bearer'),
+            );
+            if (bearerHeader != null) {
+              throw WebdavException(
+                message: 'Bearer Auth failed, maybe invalid or expired token',
+                statusCode: 401,
+                response: resp,
+              );
+            } else {
+              final authType = _extractAuthType(w3AHeaders.first);
+              throw WebdavException(
+                message: 'Bearer Auth failed, server requires $authType auth',
+                statusCode: 401,
+                response: resp,
+              );
+            }
+
+          case final NoAuth _:
+            final authType = _extractAuthType(w3AHeaders.first);
+            throw WebdavException(
+              message: 'Auth failed, server requires $authType auth',
+              statusCode: 401,
+              response: resp,
+            );
+        }
       }
 
       throw WebdavException.fromResponse(resp, 'Authentication failed');
@@ -106,6 +152,16 @@ class _WdDio with DioMixin implements Dio {
     }
 
     return resp;
+  }
+
+  /// Used in [req].
+  String? _extractAuthType(String authHeader) {
+    final parts = authHeader.split(' ');
+    if (parts.isNotEmpty) {
+      final authType = parts[0].replaceAll(',', '');
+      return authType.isNotEmpty ? authType : null;
+    }
+    return null;
   }
 
   // OPTIONS
@@ -533,6 +589,7 @@ class _WdDio with DioMixin implements Dio {
     String dataStr, {
     int timeout = 3600,
     PropsDepth depth = PropsDepth.infinity,
+    String? ifHeader,
     CancelToken? cancelToken,
   }) async {
     var resp = await req(
@@ -544,6 +601,10 @@ class _WdDio with DioMixin implements Dio {
         options.headers?['content-type'] = 'application/xml;charset=UTF-8';
         options.headers?['Timeout'] = 'Second-$timeout';
         options.headers?['Depth'] = depth.value;
+
+        if (ifHeader != null) {
+          options.headers?['If'] = ifHeader;
+        }
 
         options.responseType = ResponseType.plain;
       },

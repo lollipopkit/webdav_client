@@ -301,6 +301,7 @@ class WebdavClient {
     int timeout = 3600,
     String? owner,
     PropsDepth depth = PropsDepth.infinity,
+    String? ifHeader,
     CancelToken? cancelToken,
   }) async {
     final xmlBuilder = XmlBuilder();
@@ -335,6 +336,7 @@ class WebdavClient {
       depth: depth,
       timeout: timeout,
       cancelToken: cancelToken,
+      ifHeader: ifHeader,
     );
 
     // Check if the lock was successful
@@ -398,37 +400,34 @@ class WebdavClient {
     String? etag,
     void Function(int count, int total)? onProgress,
     CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    bool notTag = false,
   }) async {
-    final headers = <String, dynamic>{};
-
     // RFC 4918 10.4.2
+    final requestHeaders = headers ?? <String, dynamic>{};
+
+    // Construct the If header
     if (lockToken != null || etag != null) {
       final conditions = <String>[];
-      final taggedList = StringBuffer();
-
-      // If has a URL, add it to the tagged list
-      if (path.isNotEmpty) {
-        taggedList.write('<${Uri.encodeFull(joinPath(url, path))}>');
-      }
+      final resourceTag = Uri.encodeFull(joinPath(url, path));
+      final taggedList = StringBuffer('<$resourceTag>');
 
       final resourceConditions = <String>[];
       if (lockToken != null) {
-        resourceConditions.add('(<$lockToken>)');
+        resourceConditions
+            .add(notTag ? '(Not <$lockToken>)' : '(<$lockToken>)');
       }
 
       if (etag != null) {
-        resourceConditions.add('(["$etag"])');
+        resourceConditions.add(notTag ? '(Not ["$etag"])' : '(["$etag"])');
       }
 
       if (taggedList.isNotEmpty) {
         taggedList.write(' ${resourceConditions.join(' ')}');
         conditions.add(taggedList.toString());
-      } else {
-        // No URL-specific conditions, just add the resource conditions
-        conditions.addAll(resourceConditions);
       }
 
-      headers['If'] = conditions.join(' ');
+      requestHeaders['If'] = conditions.join(' ');
     }
 
     await _client.wdWriteWithBytes(
@@ -456,12 +455,12 @@ class WebdavClient {
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:propertyupdate', nest: () {
       xmlBuilder.namespace('d', 'DAV:');
-      
+
       // Add common namespace declarations for all custom properties
       final allProps = <String>{};
       if (setProps != null) allProps.addAll(setProps.keys);
       if (removeProps != null) allProps.addAll(removeProps);
-      
+
       final namespaces = <String>{};
       for (final prop in allProps) {
         final parts = prop.split(':');
@@ -469,7 +468,7 @@ class WebdavClient {
           namespaces.add(parts[0]);
         }
       }
-      
+
       // Register all namespaces at the root level
       for (final ns in namespaces) {
         xmlBuilder.namespace(ns, 'http://example.com/ns/$ns');
@@ -532,18 +531,20 @@ class WebdavClient {
             // Check non-200 status codes
             if (!statusText.contains('200') && !statusText.contains('204')) {
               final href = WebdavXml.getElementText(response, 'href') ?? '';
-              
+
               // Get the prop names that failed for better error messages
               final failedProps = <String>[];
-              final propElement = WebdavXml.findElements(propstat, 'prop').firstOrNull;
+              final propElement =
+                  WebdavXml.findElements(propstat, 'prop').firstOrNull;
               if (propElement != null) {
                 for (var prop in propElement.childElements) {
                   failedProps.add(prop.name.qualified);
                 }
               }
-              
+
               throw WebdavException(
-                message: 'Failed to update properties for $href: $statusText. Failed props: $failedProps',
+                message:
+                    'Failed to update properties for $href: $statusText. Failed props: $failedProps',
                 statusCode: 422,
               );
             }

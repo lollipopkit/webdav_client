@@ -47,3 +47,14 @@ String computeNonce() {
   final values = List<int>.generate(16, (i) => rnd.nextInt(256));
   return hex.encode(values).substring(0, 16);
 }
+
+extension IterX<T> on Iterable<T> {
+  T? firstWhereOrNull(bool Function(T) test) {
+    for (final element in this) {
+      if (test(element)) {
+        return element;
+      }
+    }
+    return null;
+  }
+}
