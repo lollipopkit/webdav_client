@@ -56,7 +56,7 @@ class WebdavException<T> implements Exception {
       case 507:
         errorMessage = 'Insufficient storage';
         break;
-      // 其他HTTP状态码
+      // Other common status codes
       case 401:
         errorMessage = 'Authentication required';
         break;

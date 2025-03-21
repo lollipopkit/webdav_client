@@ -586,7 +586,7 @@ class _WdDio with DioMixin implements Dio {
   Future<Response> wdLock(
     WebdavClient self,
     String path,
-    String dataStr, {
+    String? dataStr, {
     int timeout = 3600,
     PropsDepth depth = PropsDepth.infinity,
     String? ifHeader,

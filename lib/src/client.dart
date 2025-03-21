@@ -315,8 +315,42 @@ class WebdavClient {
     String? owner,
     PropsDepth depth = PropsDepth.infinity,
     String? ifHeader,
+    bool refreshLock = false,
     CancelToken? cancelToken,
   }) async {
+    if (refreshLock) {
+      if (ifHeader == null) {
+        throw WebdavException(
+          message: 'If header is required for lock refresh',
+          statusCode: 400,
+        );
+      }
+
+      final resp = await _client.wdLock(
+        this,
+        path,
+        null, // Refresh lock does not require a lockinfo XML body
+        depth: depth,
+        timeout: timeout,
+        cancelToken: cancelToken,
+        ifHeader: ifHeader,
+      );
+
+      // RFC 4918 Section 9.10.2
+      // We need to get the new lock token from the response
+      final str = resp.data as String;
+      try {
+        return _extractLockToken(str);
+      } catch (e) {
+        // If can't extract the lock token, try to get it from the ifHeader
+        final lockToken = _extractLockTokenFromIfHeader(ifHeader);
+        if (lockToken != null) {
+          return lockToken;
+        }
+        rethrow;
+      }
+    }
+
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:lockinfo', nest: () {
@@ -360,6 +394,20 @@ class WebdavClient {
 
     final str = resp.data as String;
     return _extractLockToken(str);
+  }
+
+  String? _extractLockTokenFromIfHeader(String ifHeader) {
+    final regex = RegExp(r'<([^>]+)>');
+    final matches = regex.allMatches(ifHeader);
+    for (final match in matches) {
+      final token = match.group(1);
+      if (token != null &&
+          (token.startsWith('urn:uuid:') ||
+              token.startsWith('opaquelocktoken:'))) {
+        return token;
+      }
+    }
+    return null;
   }
 
   /// Unlock a resource
