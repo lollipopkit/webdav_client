@@ -57,7 +57,7 @@ enum PropfindType {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:propfind', nest: () {
-      xmlBuilder.namespace('d', 'DAV:');
+      xmlBuilder.namespace('DAV:', 'd');
 
       // Collect all namespaces
       final namespaces = <String, String>{};
@@ -97,7 +97,7 @@ enum PropfindType {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:propfind', nest: () {
-      xmlBuilder.namespace('d', 'DAV:');
+      xmlBuilder.namespace('DAV:', 'd');
       xmlBuilder.element('d:allprop');
     });
     return xmlBuilder.buildDocument().toString();
@@ -107,7 +107,7 @@ enum PropfindType {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:propfind', nest: () {
-      xmlBuilder.namespace('d', 'DAV:');
+      xmlBuilder.namespace('DAV:', 'd');
       xmlBuilder.element('d:propname');
     });
     return xmlBuilder.buildDocument().toString();
