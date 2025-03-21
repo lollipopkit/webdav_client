@@ -1,17 +1,6 @@
 import 'package:webdav_client_plus/src/file.dart';
 import 'package:xml/xml.dart';
 
-const fileXmlStr = '''<d:propfind xmlns:d='DAV:'>
-			<d:prop>
-				<d:displayname/>
-				<d:resourcetype/>
-				<d:getcontentlength/>
-				<d:getcontenttype/>
-				<d:getetag/>
-				<d:getlastmodified/>
-			</d:prop>
-		</d:propfind>''';
-
 abstract final class WebdavXml {
   static List<XmlElement> findAllElements(XmlDocument document, String tag) =>
       document.findAllElements(tag, namespace: '*').toList();

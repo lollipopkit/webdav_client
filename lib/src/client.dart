@@ -87,14 +87,19 @@ class WebdavClient {
   Future<List<WebdavFile>> readDir(
     String path, {
     PropsDepth depth = PropsDepth.one,
+    List<String> properties = PropfindType.defaultFindProperties,
     CancelToken? cancelToken,
+    PropfindType findType = PropfindType.prop,
   }) async {
     path = _fixCollectionPath(path);
+
+    final xmlStr = findType.buildXmlStr(properties);
+
     final resp = await _client.wdPropfind(
       this,
       path,
       depth,
-      fileXmlStr,
+      xmlStr,
       cancelToken: cancelToken,
     );
 
@@ -103,13 +108,21 @@ class WebdavClient {
   }
 
   /// Read a single files properties
-  Future<WebdavFile?> readProps(String path, [CancelToken? cancelToken]) async {
+  Future<WebdavFile?> readProps(
+    String path, {
+    CancelToken? cancelToken,
+    PropfindType findType = PropfindType.prop,
+    List<String> properties = PropfindType.defaultFindProperties,
+  }) async {
     // path = _fixSlashes(path);
+
+    final xmlStr = findType.buildXmlStr(properties);
+
     final resp = await _client.wdPropfind(
       this,
       path,
       PropsDepth.zero,
-      fileXmlStr,
+      xmlStr,
       cancelToken: cancelToken,
     );
 
@@ -278,7 +291,7 @@ class WebdavClient {
   /// Check if a resource exists
   Future<bool> exists(String path, {CancelToken? cancelToken}) async {
     try {
-      await readProps(path, cancelToken);
+      await readProps(path, cancelToken: cancelToken);
       return true;
     } on WebdavException catch (e) {
       if (e.response?.statusCode == 404) {
