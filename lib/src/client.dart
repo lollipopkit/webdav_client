@@ -217,12 +217,28 @@ class WebdavClient {
 
   /// Rename a folder or file
   /// If you rename the folder, some webdav services require a '/' at the end of the path.
+  ///
+  /// {@template webdav_client_rename}
+  /// - [oldPath] of the resource
+  /// - [newPath] of the resource
+  /// - [overwrite] If true, the destination will be overwritten
+  /// - [cancelToken] for cancelling the request
+  /// - [depth] of the PROPFIND request
+  /// {@endtemplate}
   Future<void> rename(
     String oldPath,
     String newPath, {
     bool overwrite = false,
     CancelToken? cancelToken,
+    PropsDepth? depth,
   }) {
+    if (depth != null &&
+        depth != PropsDepth.infinity &&
+        oldPath.endsWith('/')) {
+      // If endpoint is a collection, depth must be infinity
+      depth = PropsDepth.infinity;
+    }
+
     return _client.wdCopyMove(
       this,
       oldPath,
@@ -230,6 +246,27 @@ class WebdavClient {
       false,
       overwrite,
       cancelToken: cancelToken,
+      depth: depth ?? PropsDepth.infinity,
+    );
+  }
+
+  /// Move a folder or file
+  /// If you move the folder, some webdav services require a '/' at the end of the path.
+  ///
+  /// {@macro webdav_client_rename}
+  Future<void> move(
+    String oldPath,
+    String newPath, {
+    bool overwrite = false,
+    CancelToken? cancelToken,
+    PropsDepth? depth,
+  }) {
+    return rename(
+      oldPath,
+      newPath,
+      overwrite: overwrite,
+      cancelToken: cancelToken,
+      depth: depth,
     );
   }
 
@@ -353,7 +390,16 @@ class WebdavClient {
     if (refreshLock) {
       if (ifHeader == null) {
         throw WebdavException(
-          message: 'If header is required for lock refresh',
+          message: '`If` header is required for lock refresh',
+          statusCode: 400,
+        );
+      }
+
+      // Extract the lock token from the If header so we have it even if the server doesn't return it in the response
+      final existingLockToken = _extractLockTokenFromIfHeader(ifHeader);
+      if (existingLockToken == null) {
+        throw WebdavException(
+          message: 'Valid lock token not found in If header',
           statusCode: 400,
         );
       }
@@ -361,26 +407,20 @@ class WebdavClient {
       final resp = await _client.wdLock(
         this,
         path,
-        null, // Refresh lock does not require a lockinfo XML body
+        null, // Empty body for lock refresh
         depth: depth,
         timeout: timeout,
         cancelToken: cancelToken,
         ifHeader: ifHeader,
       );
 
-      // RFC 4918 Section 9.10.2
-      // We need to get the new lock token from the response
-      final str = resp.data as String;
-      try {
-        return _extractLockToken(str);
-      } catch (e) {
-        // If can't extract the lock token, try to get it from the ifHeader
-        final lockToken = _extractLockTokenFromIfHeader(ifHeader);
-        if (lockToken != null) {
-          return lockToken;
-        }
-        rethrow;
+      if (resp.statusCode != 200) {
+        throw _newResponseError(resp);
       }
+
+      // RFC 4918 9.10.2
+      // Returns the same lock token if the lock was successfully refreshed
+      return existingLockToken;
     }
 
     final xmlBuilder = XmlBuilder();
@@ -487,26 +527,7 @@ class WebdavClient {
 
     // Construct the If header
     if (lockToken != null || etag != null) {
-      final conditions = <String>[];
-      final resourceTag = Uri.encodeFull(joinPath(url, path));
-      final taggedList = StringBuffer('<$resourceTag>');
-
-      final resourceConditions = <String>[];
-      if (lockToken != null) {
-        resourceConditions
-            .add(notTag ? '(Not <$lockToken>)' : '(<$lockToken>)');
-      }
-
-      if (etag != null) {
-        resourceConditions.add(notTag ? '(Not ["$etag"])' : '(["$etag"])');
-      }
-
-      if (taggedList.isNotEmpty) {
-        taggedList.write(' ${resourceConditions.join(' ')}');
-        conditions.add(taggedList.toString());
-      }
-
-      requestHeaders['If'] = conditions.join(' ');
+      requestHeaders['If'] = _buildIfHeader(url, path, lockToken, etag, notTag);
     }
 
     await _client.wdWriteWithBytes(
@@ -634,24 +655,35 @@ class WebdavClient {
 }
 
 extension _Utils on WebdavClient {
-// Extract the lock token from the response
+  // Extract the lock token from the response
   String _extractLockToken(String xmlString) {
     final document = XmlDocument.parse(xmlString);
 
-    // Try to find the lock token in a locktoken element
-    final lockTokenElements =
-        document.findAllElements('locktoken', namespace: '*');
-    for (final lockToken in lockTokenElements) {
-      final href = lockToken.findElements('href', namespace: '*').firstOrNull;
-      if (href != null) {
-        final text = href.innerText;
-        if (text.isNotEmpty) {
-          return text;
+    // First, try activelock/locktoken/href
+    final activeLockElements =
+        document.findAllElements('activelock', namespace: '*');
+    for (final activeLock in activeLockElements) {
+      final lockTokenElements =
+          activeLock.findElements('locktoken', namespace: '*');
+      for (final lockToken in lockTokenElements) {
+        final href = lockToken.findElements('href', namespace: '*').firstOrNull;
+        if (href != null && href.innerText.isNotEmpty) {
+          return href.innerText;
         }
       }
     }
 
-    // If the lock token is not in a locktoken element, try to find it in a href element
+    // Fall back to locktoken/href
+    final lockTokenElements =
+        document.findAllElements('locktoken', namespace: '*');
+    for (final lockToken in lockTokenElements) {
+      final href = lockToken.findElements('href', namespace: '*').firstOrNull;
+      if (href != null && href.innerText.isNotEmpty) {
+        return href.innerText;
+      }
+    }
+
+    // Try
     final hrefElements = document.findAllElements('href', namespace: '*');
     for (final href in hrefElements) {
       final text = href.innerText;
@@ -678,6 +710,43 @@ extension _Utils on WebdavClient {
       }
     }
     return null;
+  }
+
+  String _buildIfHeader(
+    String url,
+    String path,
+    String? lockToken,
+    String? etag,
+    bool notTag,
+  ) {
+    if (lockToken == null && etag == null) return '';
+
+    final conditions = <String>[];
+    final resourceTag = Uri.encodeFull(joinPath(url, path));
+
+    // 确保资源标记是完整的 URL
+    final taggedList = StringBuffer('<$resourceTag>');
+
+    final resourceConditions = <String>[];
+    if (lockToken != null) {
+      // 确保锁令牌格式正确
+      final formattedLockToken =
+          lockToken.startsWith('<') ? lockToken : '<$lockToken>';
+      resourceConditions
+          .add(notTag ? '(Not $formattedLockToken)' : '($formattedLockToken)');
+    }
+
+    if (etag != null) {
+      // 确保 ETag 格式正确
+      resourceConditions.add(notTag ? '(Not ["$etag"])' : '(["$etag"])');
+    }
+
+    if (resourceConditions.isNotEmpty) {
+      taggedList.write(' ${resourceConditions.join(' ')}');
+      conditions.add(taggedList.toString());
+    }
+
+    return conditions.join(' ');
   }
 
   String _fixCollectionPath(String path) {

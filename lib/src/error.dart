@@ -30,11 +30,36 @@ class WebdavException<T> implements Exception {
     // RFC 4918
     switch (status) {
       case 207:
-        // Parse the exact err of the multistatus response
+        // multistatus
         try {
           final xmlDoc = XmlDocument.parse(response.data as String);
           final errorElements = xmlDoc.findAllElements('error', namespace: '*');
           if (errorElements.isNotEmpty) {
+            // Check common WebDAV preconditions/postconditions codes
+            for (final errorElement in errorElements) {
+              // Lookup for lock-token-submitted
+              if (errorElement
+                  .findElements('lock-token-submitted', namespace: '*')
+                  .isNotEmpty) {
+                return WebdavException(
+                  message: 'Resource is locked and requires a valid lock token',
+                  statusCode: status,
+                  statusMessage: statusMessage,
+                  response: response,
+                );
+              }
+              if (errorElement
+                  .findElements('no-conflicting-lock', namespace: '*')
+                  .isNotEmpty) {
+                return WebdavException(
+                  message: 'The resource has a conflicting lock',
+                  statusCode: status,
+                  statusMessage: statusMessage,
+                  response: response,
+                );
+              }
+            }
+
             final firstError = errorElements.first;
             errorMessage = 'MultiStatus error: ${firstError.innerText}';
           }

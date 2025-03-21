@@ -58,17 +58,31 @@ enum PropfindType {
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:propfind', nest: () {
       xmlBuilder.namespace('d', 'DAV:');
+
+      // Collect all namespaces
+      final namespaces = <String, String>{};
+      for (final prop in properties) {
+        if (prop.contains(':')) {
+          final parts = prop.split(':');
+          final prefix = parts[0];
+          if (prefix != 'd' && !namespaces.containsKey(prefix)) {
+            namespaces[prefix] = 'http://example.com/ns/$prefix';
+          }
+        }
+      }
+
+      // Add namespaces to the XML
+      namespaces.forEach((prefix, uri) {
+        xmlBuilder.namespace(prefix, uri);
+      });
+
       xmlBuilder.element('d:prop', nest: () {
         for (final prop in properties) {
-          // Process possible namespace
+          // Process all properties
           if (prop.contains(':')) {
             final parts = prop.split(':');
             final prefix = parts[0];
             final name = parts[1];
-            if (prefix != 'd') {
-              // Add namespace
-              xmlBuilder.namespace(prefix, 'http://example.com/ns/$prefix');
-            }
             xmlBuilder.element('$prefix:$name');
           } else {
             xmlBuilder.element('d:$prop');

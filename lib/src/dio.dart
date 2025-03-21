@@ -224,15 +224,28 @@ class _WdDio with DioMixin implements Dio {
   }
 
   /// COPY OR MOVE
-  Future<void> wdCopyMove(WebdavClient self, String oldPath, String newPath,
-      bool isCopy, bool overwrite,
-      {CancelToken? cancelToken}) async {
+  Future<void> wdCopyMove(
+    WebdavClient self,
+    String oldPath,
+    String newPath,
+    bool isCopy,
+    bool overwrite, {
+    CancelToken? cancelToken,
+    PropsDepth depth = PropsDepth.infinity,
+  }) async {
     final method = isCopy == true ? 'COPY' : 'MOVE';
-    final resp = await req(self, method, oldPath, optionsHandler: (options) {
-      options.headers?['destination'] =
-          Uri.encodeFull(joinPath(self.url, newPath));
-      options.headers?['overwrite'] = overwrite == true ? 'T' : 'F';
-    }, cancelToken: cancelToken);
+    final resp = await req(
+      self,
+      method,
+      oldPath,
+      optionsHandler: (options) {
+        options.headers?['destination'] =
+            Uri.encodeFull(joinPath(self.url, newPath));
+        options.headers?['overwrite'] = overwrite == true ? 'T' : 'F';
+        options.headers?['depth'] = depth.value;
+      },
+      cancelToken: cancelToken,
+    );
 
     final status = resp.statusCode;
     if (status == 201 || status == 204) {
