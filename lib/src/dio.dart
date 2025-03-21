@@ -79,6 +79,7 @@ class _WdDio with DioMixin implements Dio {
               );
             }
             break;
+
           case final BasicAuth _:
             // Check if the server supports Basic auth
             final basicHeader = w3AHeaders.firstWhereOrNull(
@@ -86,7 +87,8 @@ class _WdDio with DioMixin implements Dio {
             );
             if (basicHeader != null) {
               throw WebdavException(
-                message: 'Basic Auth failed, maybe invalid username or password',
+                message:
+                    'Basic Auth failed, maybe invalid username or password',
                 statusCode: 401,
                 response: resp,
               );
@@ -152,16 +154,6 @@ class _WdDio with DioMixin implements Dio {
     }
 
     return resp;
-  }
-
-  /// Used in [req].
-  String? _extractAuthType(String authHeader) {
-    final parts = authHeader.split(' ');
-    if (parts.isNotEmpty) {
-      final authType = parts[0].replaceAll(',', '');
-      return authType.isNotEmpty ? authType : null;
-    }
-    return null;
   }
 
   // OPTIONS
@@ -267,17 +259,6 @@ class _WdDio with DioMixin implements Dio {
     } else {
       throw _newResponseError(resp);
     }
-  }
-
-  /// create parent folder
-  Future<void>? _createParent(WebdavClient self, String path,
-      {CancelToken? cancelToken}) {
-    var parentPath = path.substring(0, path.lastIndexOf('/') + 1);
-
-    if (parentPath == '' || parentPath == '/') {
-      return null;
-    }
-    return self.mkdirAll(parentPath, cancelToken);
   }
 
   /// read a file with bytes
@@ -660,5 +641,28 @@ class _WdDio with DioMixin implements Dio {
     }
 
     return resp;
+  }
+}
+
+extension on _WdDio {
+  /// Used in [req].
+  String? _extractAuthType(String authHeader) {
+    final parts = authHeader.split(' ');
+    if (parts.isNotEmpty) {
+      final authType = parts[0].replaceAll(',', '');
+      return authType.isNotEmpty ? authType : null;
+    }
+    return null;
+  }
+
+  /// create parent folder
+  Future<void>? _createParent(WebdavClient self, String path,
+      {CancelToken? cancelToken}) {
+    var parentPath = path.substring(0, path.lastIndexOf('/') + 1);
+
+    if (parentPath == '' || parentPath == '/') {
+      return null;
+    }
+    return self.mkdirAll(parentPath, cancelToken);
   }
 }

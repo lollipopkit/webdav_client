@@ -17,6 +17,12 @@ class NoAuth extends Auth {
   String? authorize(String method, String path) => null;
 }
 
+/// BasicAuth
+/// 
+/// eg.:
+/// ```dart
+/// final auth = BasicAuth(user: 'user', pwd: 'pwd');
+/// ```
 final class BasicAuth extends Auth {
   final String user;
   final String pwd;
@@ -33,6 +39,9 @@ final class BasicAuth extends Auth {
   }
 }
 
+/// BearerAuth
+/// 
+/// eg. `Bearer token`
 final class BearerAuth extends Auth {
   final String token;
 
@@ -46,6 +55,9 @@ final class BearerAuth extends Auth {
   }
 }
 
+/// DigestAuth
+/// 
+/// It's a more secure way to authenticate than BasicAuth.
 final class DigestAuth extends Auth {
   final String user;
   final String pwd;
@@ -197,28 +209,49 @@ final class DigestAuth extends Auth {
       }
     }
 
+    // Default to MD5 if no algorithm is specified or recognized
     return md5Hash(data);
   }
 }
 
 /// DigestParts
+/// 
+/// Class for parsing and storing HTTP Digest Authentication parameters
+/// as defined in RFC 2617 and RFC 7616
 class DigestParts {
+  /// Constructor that parses WWW-Authenticate header from server
+  /// 
+  /// @param authHeader The WWW-Authenticate header value from server response
   DigestParts(String? authHeader) {
     if (authHeader != null) {
       // First, extract the authentication scheme
       String headerData = authHeader;
       if (authHeader.toLowerCase().startsWith('digest')) {
+        // Remove 'Digest ' prefix to isolate the parameters
         headerData = authHeader.substring(6).trim();
       }
 
-      // RFC compliant parsing
+      // Parse the header values according to RFC specification
       _parseAuthHeader(headerData);
     }
   }
 
+  /// Request URI for digest calculation
   String uri = '';
+  
+  /// HTTP method for digest calculation (GET, PUT, etc.)
   String method = '';
 
+  /// Storage for all digest authentication parameters
+  /// 
+  /// Common parameters include:
+  /// - nonce: Server-generated unique string for this authentication attempt
+  /// - realm: String that defines the protection space
+  /// - qop: Quality of protection (auth, auth-int)
+  /// - opaque: Server-provided string that should be returned unchanged
+  /// - algorithm: Hash algorithm to use (MD5, SHA-256, etc.)
+  /// - entityBody: Used for auth-int qop
+  /// - charset: Character encoding for the credentials
   Map<String, String> parts = {
     'nonce': '',
     'realm': '',
@@ -229,10 +262,18 @@ class DigestParts {
     'charset': '',
   };
 
+  /// Regular expression for parsing digest authentication header parameters
+  /// Matches key-value pairs in the format: key="value" or key=value
   static final headerRegex = RegExp(
     r'(\w+)=(?:"([^"]*)"|([^,]*))',
     caseSensitive: false,
   );
+  
+  /// Parses the authentication header into key-value pairs
+  /// 
+  /// Extracts all parameters from the WWW-Authenticate header
+  /// and stores them in the parts map for later use in digest calculation
+  /// @param headerData The header data string without the 'Digest ' prefix
   void _parseAuthHeader(String headerData) {
     final matches = headerRegex.allMatches(headerData);
 
@@ -241,5 +282,11 @@ class DigestParts {
       final value = match.group(2) ?? match.group(3) ?? '';
       parts[key] = value.trim();
     }
+  }
+  
+  /// Creates a string representation of the digest parts
+  @override
+  String toString() {
+    return 'DigestParts{uri: $uri, method: $method, parts: $parts}';
   }
 }

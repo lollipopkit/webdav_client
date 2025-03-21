@@ -396,20 +396,6 @@ class WebdavClient {
     return _extractLockToken(str);
   }
 
-  String? _extractLockTokenFromIfHeader(String ifHeader) {
-    final regex = RegExp(r'<([^>]+)>');
-    final matches = regex.allMatches(ifHeader);
-    for (final match in matches) {
-      final token = match.group(1);
-      if (token != null &&
-          (token.startsWith('urn:uuid:') ||
-              token.startsWith('opaquelocktoken:'))) {
-        return token;
-      }
-    }
-    return null;
-  }
-
   /// Unlock a resource
   Future<void> unlock(String path, String lockToken,
       [CancelToken? cancelToken]) async {
@@ -618,44 +604,60 @@ class WebdavClient {
   }
 }
 
+extension _Utils on WebdavClient {
 // Extract the lock token from the response
-String _extractLockToken(String xmlString) {
-  final document = XmlDocument.parse(xmlString);
+  String _extractLockToken(String xmlString) {
+    final document = XmlDocument.parse(xmlString);
 
-  // Try to find the lock token in a locktoken element
-  final lockTokenElements =
-      document.findAllElements('locktoken', namespace: '*');
-  for (final lockToken in lockTokenElements) {
-    final href = lockToken.findElements('href', namespace: '*').firstOrNull;
-    if (href != null) {
+    // Try to find the lock token in a locktoken element
+    final lockTokenElements =
+        document.findAllElements('locktoken', namespace: '*');
+    for (final lockToken in lockTokenElements) {
+      final href = lockToken.findElements('href', namespace: '*').firstOrNull;
+      if (href != null) {
+        final text = href.innerText;
+        if (text.isNotEmpty) {
+          return text;
+        }
+      }
+    }
+
+    // If the lock token is not in a locktoken element, try to find it in a href element
+    final hrefElements = document.findAllElements('href', namespace: '*');
+    for (final href in hrefElements) {
       final text = href.innerText;
-      if (text.isNotEmpty) {
+      if (text.startsWith('urn:uuid:') || text.startsWith('opaquelocktoken:')) {
         return text;
       }
     }
+
+    throw WebdavException(
+      message: 'No lock token found in response',
+      statusCode: 500,
+    );
   }
 
-  // If the lock token is not in a locktoken element, try to find it in a href element
-  final hrefElements = document.findAllElements('href', namespace: '*');
-  for (final href in hrefElements) {
-    final text = href.innerText;
-    if (text.startsWith('urn:uuid:') || text.startsWith('opaquelocktoken:')) {
-      return text;
+  String? _extractLockTokenFromIfHeader(String ifHeader) {
+    final regex = RegExp(r'<([^>]+)>');
+    final matches = regex.allMatches(ifHeader);
+    for (final match in matches) {
+      final token = match.group(1);
+      if (token != null &&
+          (token.startsWith('urn:uuid:') ||
+              token.startsWith('opaquelocktoken:'))) {
+        return token;
+      }
     }
+    return null;
   }
 
-  throw WebdavException(
-    message: 'No lock token found in response',
-    statusCode: 500,
-  );
-}
-
-String _fixCollectionPath(String path) {
-  if (!path.startsWith('/')) {
-    path = '/$path';
+  String _fixCollectionPath(String path) {
+    if (!path.startsWith('/')) {
+      path = '/$path';
+    }
+    if (!path.endsWith('/')) {
+      return '$path/';
+    }
+    return path;
   }
-  if (!path.endsWith('/')) {
-    return '$path/';
-  }
-  return path;
 }
