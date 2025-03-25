@@ -238,7 +238,7 @@ void _testClient(WebdavClient client) async {
     // Try to read from non-existent directory
     expect(
       () => client.readDir('/non-existent-dir'),
-      throwsA(isA<WebdavException>()),
+      throwsA(isA<WebdavException<Object>>()),
     );
 
     // Try to modify properties of non-existent resource
@@ -247,13 +247,13 @@ void _testClient(WebdavClient client) async {
         '/non-existent-file.txt',
         setProps: {'custom:prop': 'value'},
       ),
-      throwsA(isA<WebdavException>()),
+      throwsA(isA<WebdavException<Object>>()),
     );
 
     // Try to lock non-existent resource
     expect(
       () => client.lock('/non-existent-file.txt'),
-      throwsA(isA<WebdavException>()),
+      throwsA(isA<WebdavException<Object>>()),
     );
   });
 

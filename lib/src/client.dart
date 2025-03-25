@@ -71,7 +71,7 @@ class WebdavClient {
 
   /// Test whether the service can connect
   Future<void> ping([CancelToken? cancelToken]) async {
-    var resp = await _client.wdOptions('/', cancelToken: cancelToken);
+    final resp = await _client.wdOptions('/', cancelToken: cancelToken);
     if (resp.statusCode != 200) {
       throw _newResponseError(resp);
     }
@@ -133,7 +133,14 @@ class WebdavClient {
       cancelToken: cancelToken,
     );
 
-    final str = resp.data as String;
+    final str = resp.data;
+    if (str == null) {
+      throw WebdavException(
+        message: 'No data returned',
+        statusCode: resp.statusCode,
+      );
+    }
+
     return WebdavFile.parseFiles(path, str);
   }
 
@@ -155,7 +162,14 @@ class WebdavClient {
       cancelToken: cancelToken,
     );
 
-    final str = resp.data as String;
+    final str = resp.data;
+    if (str == null) {
+      throw WebdavException(
+        message: 'No data returned',
+        statusCode: resp.statusCode,
+      );
+    }
+
     return WebdavFile.parseFiles(path, str, skipSelf: false).firstOrNull;
   }
 
@@ -172,20 +186,21 @@ class WebdavClient {
   /// Recursively create folders
   Future<void> mkdirAll(String path, [CancelToken? cancelToken]) async {
     path = _fixCollectionPath(path);
-    var resp = await _client.wdMkcol(path, cancelToken: cancelToken);
-    var status = resp.statusCode;
+    final resp = await _client.wdMkcol(path, cancelToken: cancelToken);
+    final status = resp.statusCode;
     if (status == 201 || status == 405) {
       return;
-    } else if (status == 409) {
-      var paths = path.split('/');
+    }
+    if (status == 409) {
+      final paths = path.split('/');
       var sub = '/';
       for (var e in paths) {
         if (e == '') {
           continue;
         }
         sub += '$e/';
-        resp = await _client.wdMkcol(sub, cancelToken: cancelToken);
-        status = resp.statusCode;
+        final resp = await _client.wdMkcol(sub, cancelToken: cancelToken);
+        final status = resp.statusCode;
         if (status != 201 && status != 405) {
           throw _newResponseError(resp);
         }
@@ -353,7 +368,7 @@ class WebdavClient {
     try {
       await readProps(path, cancelToken: cancelToken);
       return true;
-    } on WebdavException catch (e) {
+    } on WebdavException<Object> catch (e) {
       if (e.response?.statusCode == 404) {
         return false;
       }

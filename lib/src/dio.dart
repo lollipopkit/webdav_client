@@ -1,5 +1,7 @@
 part of 'client.dart';
 
+final _httpPrefixReg = RegExp(r'(http|https)://');
+
 class _WdDio with DioMixin {
   final WebdavClient client;
 
@@ -12,7 +14,7 @@ class _WdDio with DioMixin {
     httpClientAdapter = getAdapter();
   }
 
-  Future<Response> req(
+  Future<Response<T>> req<T>(
     String method,
     String path, {
     dynamic data,
@@ -35,10 +37,10 @@ class _WdDio with DioMixin {
       options.headers?['authorization'] = authStr;
     }
 
-    final resp = await requestUri(
-      Uri.parse(path.startsWith(RegExp(r'(http|https)://'))
-          ? path
-          : joinPath(client.url, path)),
+    final uri = Uri.parse(
+        path.startsWith(_httpPrefixReg) ? path : joinPath(client.url, path));
+    final resp = await requestUri<T>(
+      uri,
       options: options,
       data: data,
       onSendProgress: onSendProgress,
@@ -176,13 +178,13 @@ class _WdDio with DioMixin {
   // }
 
   // PROPFIND
-  Future<Response> wdPropfind(
+  Future<Response<String>> wdPropfind(
     String path,
     PropsDepth depth,
     String dataStr, {
     CancelToken? cancelToken,
   }) async {
-    var resp = await req(
+    final resp = await req<String>(
       'PROPFIND',
       path,
       data: dataStr,
@@ -192,6 +194,8 @@ class _WdDio with DioMixin {
         options.headers?['accept'] = 'application/xml,text/xml';
         options.headers?['accept-charset'] = 'utf-8';
         options.headers?['accept-encoding'] = '';
+
+        options.responseType = ResponseType.plain;
       },
       cancelToken: cancelToken,
     );
@@ -274,7 +278,7 @@ class _WdDio with DioMixin {
       throw _newResponseError(pResp);
     }
 
-    var resp = await req(
+    final resp = await req(
       'GET',
       path,
       optionsHandler: (options) => options.responseType = ResponseType.bytes,
@@ -317,29 +321,28 @@ class _WdDio with DioMixin {
     void Function(int count, int total)? onProgress,
     CancelToken? cancelToken,
   }) async {
-    // fix auth error
-    var pResp = await wdOptions(path, cancelToken: cancelToken);
+    // Check if the file exists
+    final pResp = await wdOptions(path, cancelToken: cancelToken);
     if (pResp.statusCode != 200) {
       throw _newResponseError(pResp);
     }
 
-    Response<ResponseBody> resp;
+    final Response<ResponseBody> resp;
 
     // Reference Dio download
     // request
     try {
-      final ret = await req(
+      resp = await req<ResponseBody>(
         'GET',
         path,
         optionsHandler: (options) => options.responseType = ResponseType.stream,
         // onReceiveProgress: onProgress,
         cancelToken: cancelToken,
       );
-      resp = ret as Response<ResponseBody>;
     } on DioException catch (e) {
       if (e.type == DioExceptionType.badResponse) {
         if (e.response!.requestOptions.receiveDataWhenStatusError == true) {
-          var res = await transformer.transformResponse(
+          final res = await transformer.transformResponse(
             e.response!.requestOptions..responseType = ResponseType.json,
             e.response!.data as ResponseBody,
           );
@@ -354,21 +357,26 @@ class _WdDio with DioMixin {
       throw _newResponseError(resp);
     }
 
-    resp.headers = Headers.fromMap(resp.data!.headers);
+    final respData = resp.data;
+    if (respData == null) {
+      throw _newResponseError(resp, 'Response data is null');
+    }
+
+    resp.headers = Headers.fromMap(respData.headers);
 
     // If directory (or file) doesn't exist yet, the entire method fails
     final file = File(savePath);
     await file.create(recursive: true);
 
-    var raf = await file.open(mode: FileMode.write);
+    final fileReader = await file.open(mode: FileMode.write);
 
     //Create a Completer to notify the success/error state.
-    final completer = Completer<Response>();
+    final completer = Completer<Response<ResponseBody>>();
     var future = completer.future;
     var received = 0;
 
     // Stream<Uint8List>
-    final stream = resp.data!.stream as Stream<List<int>>;
+    final stream = respData.stream;
     var compressed = false;
     var total = 0;
     final contentEncoding = resp.headers.value(Headers.contentEncodingHeader);
@@ -389,14 +397,15 @@ class _WdDio with DioMixin {
       }
     }
 
-    late StreamSubscription subscription;
-    Future? asyncWrite;
+    late StreamSubscription<Uint8List> subscription;
+    Future<Null>? asyncWrite;
     var closed = false;
-    Future closeAndDelete() async {
+
+    Future<void> closeAndDelete() async {
       if (!closed) {
         closed = true;
         await asyncWrite;
-        await raf.close();
+        await fileReader.close();
         await file.delete();
       }
     }
@@ -405,7 +414,7 @@ class _WdDio with DioMixin {
       (data) {
         subscription.pause();
         // Write file asynchronously
-        asyncWrite = raf.writeFrom(data).then((raf) {
+        asyncWrite = fileReader.writeFrom(data).then((raf) {
           // Notify progress
           received += data.length;
 
@@ -430,23 +439,19 @@ class _WdDio with DioMixin {
         try {
           await asyncWrite;
           closed = true;
-          await raf.close();
+          await fileReader.close();
           completer.complete(resp);
         } catch (err) {
-          completer.completeError(DioException(
-            requestOptions: resp.requestOptions,
-            error: err,
-          ));
+          completer.completeError(
+              DioException(requestOptions: resp.requestOptions, error: err));
         }
       },
       onError: (e) async {
         try {
           await closeAndDelete();
         } finally {
-          completer.completeError(DioException(
-            requestOptions: resp.requestOptions,
-            error: e,
-          ));
+          completer.completeError(
+              DioException(requestOptions: resp.requestOptions, error: e));
         }
       },
       cancelOnError: true,
@@ -458,10 +463,9 @@ class _WdDio with DioMixin {
       await closeAndDelete();
     });
 
-    if (resp.requestOptions.receiveTimeout != null &&
-        resp.requestOptions.receiveTimeout!
-                .compareTo(const Duration(milliseconds: 0)) >
-            0) {
+    final recvTimeout = resp.requestOptions.receiveTimeout;
+    const zeroDuration = Duration(milliseconds: 0);
+    if (recvTimeout != null && recvTimeout.compareTo(zeroDuration) > 0) {
       future = future
           .timeout(resp.requestOptions.receiveTimeout!)
           .catchError((Object err) async {
@@ -470,13 +474,11 @@ class _WdDio with DioMixin {
         if (err is TimeoutException) {
           throw DioException(
             requestOptions: resp.requestOptions,
-            error:
-                'Receiving data timeout[${resp.requestOptions.receiveTimeout}ms]',
+            error: 'Receiving data timeout $recvTimeout ms',
             type: DioExceptionType.receiveTimeout,
           );
-        } else {
-          throw err;
         }
+        throw err;
       });
     }
     // ignore: invalid_use_of_internal_member
@@ -556,7 +558,7 @@ class _WdDio with DioMixin {
     throw _newResponseError(resp);
   }
 
-  Future<Response> wdLock(
+  Future<Response<String>> wdLock(
     String path,
     String? dataStr, {
     int timeout = 3600,
@@ -564,7 +566,7 @@ class _WdDio with DioMixin {
     String? ifHeader,
     CancelToken? cancelToken,
   }) async {
-    final resp = await req(
+    final resp = await req<String>(
       'LOCK',
       path,
       data: dataStr,
@@ -607,18 +609,20 @@ class _WdDio with DioMixin {
     return resp;
   }
 
-  Future<Response> wdProppatch(
+  Future<Response<String>> wdProppatch(
     String path,
     String dataStr, {
     CancelToken? cancelToken,
   }) async {
-    final resp = await req(
+    final resp = await req<String>(
       'PROPPATCH',
       path,
       data: dataStr,
       optionsHandler: (options) {
         options.headers?['content-type'] = 'application/xml;charset=UTF-8';
         options.headers?['accept'] = 'application/xml,text/xml';
+
+        options.responseType = ResponseType.plain;
       },
       cancelToken: cancelToken,
     );

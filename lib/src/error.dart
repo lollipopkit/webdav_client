@@ -1,6 +1,6 @@
 part of 'client.dart';
 
-class WebdavException<T> implements Exception {
+class WebdavException<T extends Object?> implements Exception {
   final String message;
   final int? statusCode;
   final String? statusMessage;
@@ -110,6 +110,6 @@ class WebdavException<T> implements Exception {
   }
 }
 
-WebdavException<T> _newResponseError<T>(Response<T> resp, [String? message]) {
+WebdavException<T> _newResponseError<T extends Object?>(Response<T> resp, [String? message]) {
   return WebdavException.fromResponse(resp, message);
 }
