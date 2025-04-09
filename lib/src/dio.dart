@@ -248,11 +248,11 @@ class _WdDio with DioMixin {
       final responseData = resp.data.toString();
       if (responseData.contains('<status>HTTP/1.1 5')) {
         // If response contains any 5xx errors, consider it a failure
-        throw DioException(
-          requestOptions: resp.requestOptions,
+        throw WebdavException(
+          message: 'Multi-Status operation partially failed: $responseData',
+          statusCode: resp.statusCode,
+          statusMessage: resp.statusMessage,
           response: resp,
-          type: DioExceptionType.badResponse,
-          error: 'Multi-Status operation partially failed: $responseData',
         );
       }
       // Otherwise, operation was successful enough to proceed
@@ -302,11 +302,11 @@ class _WdDio with DioMixin {
           return ret.data as List<int>;
         }
 
-        throw DioException(
-          requestOptions: resp.requestOptions,
+        throw WebdavException(
+          message: 'No location header found', 
+          statusCode: resp.statusCode,
+          statusMessage: resp.statusMessage,
           response: resp,
-          type: DioExceptionType.badResponse,
-          error: 'No location header found',
         );
       }
       throw _newResponseError(resp);
@@ -339,17 +339,15 @@ class _WdDio with DioMixin {
         // onReceiveProgress: onProgress,
         cancelToken: cancelToken,
       );
-    } on DioException catch (e) {
-      if (e.type == DioExceptionType.badResponse) {
-        if (e.response!.requestOptions.receiveDataWhenStatusError == true) {
-          final res = await transformer.transformResponse(
-            e.response!.requestOptions..responseType = ResponseType.json,
-            e.response!.data as ResponseBody,
-          );
-          e.response!.data = res;
-        } else {
-          e.response!.data = null;
-        }
+    } on WebdavException catch (e) {
+      if (e.response!.requestOptions.receiveDataWhenStatusError == true) {
+        final res = await transformer.transformResponse(
+          e.response!.requestOptions..responseType = ResponseType.json,
+          e.response!.data as ResponseBody,
+        );
+        e.response!.data = res;
+      } else {
+        e.response!.data = null;
       }
       rethrow;
     }
@@ -428,9 +426,11 @@ class _WdDio with DioMixin {
           try {
             await subscription.cancel();
           } finally {
-            completer.completeError(DioException(
-              requestOptions: resp.requestOptions,
-              error: err,
+            completer.completeError(WebdavException(
+              message: err.toString(),
+              statusCode: resp.statusCode,
+              statusMessage: resp.statusMessage,
+              response: resp,
             ));
           }
         });
@@ -442,16 +442,24 @@ class _WdDio with DioMixin {
           await fileReader.close();
           completer.complete(resp);
         } catch (err) {
-          completer.completeError(
-              DioException(requestOptions: resp.requestOptions, error: err));
+          completer.completeError(WebdavException(
+            message: err.toString(),
+            statusCode: resp.statusCode,
+            statusMessage: resp.statusMessage,
+            response: resp,
+          ));
         }
       },
       onError: (e) async {
         try {
           await closeAndDelete();
         } finally {
-          completer.completeError(
-              DioException(requestOptions: resp.requestOptions, error: e));
+          completer.completeError(WebdavException(
+            message: e.toString(),
+            statusCode: resp.statusCode,
+            statusMessage: resp.statusMessage,
+            response: resp,
+          ));
         }
       },
       cancelOnError: true,
@@ -472,10 +480,11 @@ class _WdDio with DioMixin {
         await subscription.cancel();
         await closeAndDelete();
         if (err is TimeoutException) {
-          throw DioException(
-            requestOptions: resp.requestOptions,
-            error: 'Receiving data timeout $recvTimeout ms',
-            type: DioExceptionType.receiveTimeout,
+          throw WebdavException(
+            message: 'Receiving data timeout $recvTimeout ms',
+            statusCode: resp.statusCode,
+            statusMessage: resp.statusMessage,
+            response: resp,
           );
         }
         throw err;
