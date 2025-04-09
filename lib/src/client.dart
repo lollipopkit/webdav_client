@@ -16,7 +16,7 @@ import 'package:xml/xml.dart';
 part 'dio.dart';
 part 'error.dart';
 
-/// WebDav Client
+/// Webdav Client
 class WebdavClient {
   /// WebDAV url
   final String url;
@@ -344,7 +344,7 @@ class WebdavClient {
   /// - [path] of the file
   /// - [onProgress] callback for progress
   /// - [cancelToken] for cancelling the request
-  Future<List<int>> read(
+  Future<Uint8List> read(
     String path, {
     void Function(int count, int total)? onProgress,
     CancelToken? cancelToken,

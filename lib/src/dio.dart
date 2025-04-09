@@ -267,7 +267,7 @@ class _WdDio with DioMixin {
   }
 
   /// read a file with bytes
-  Future<List<int>> wdReadWithBytes(
+  Future<Uint8List> wdReadWithBytes(
     String path, {
     void Function(int count, int total)? onProgress,
     CancelToken? cancelToken,
@@ -299,11 +299,11 @@ class _WdDio with DioMixin {
             onReceiveProgress: onProgress,
             cancelToken: cancelToken,
           );
-          return ret.data as List<int>;
+          return ret.data as Uint8List;
         }
 
         throw WebdavException(
-          message: 'No location header found', 
+          message: 'No location header found',
           statusCode: resp.statusCode,
           statusMessage: resp.statusMessage,
           response: resp,
@@ -311,7 +311,7 @@ class _WdDio with DioMixin {
       }
       throw _newResponseError(resp);
     }
-    return resp.data as List<int>;
+    return resp.data as Uint8List;
   }
 
   /// read a file with stream
