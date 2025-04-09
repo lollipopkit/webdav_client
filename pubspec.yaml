@@ -1,7 +1,7 @@
 name: webdav_client_plus
 description: A simple WebDAV client that supports some common methods.
 
-version: 1.0.0
+version: 1.0.1
 homepage: https://github.com/lollipopkit/webdav_client
 
 environment:
