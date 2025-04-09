@@ -43,6 +43,7 @@ enum PropfindType {
     };
   }
 
+  /// Default properties to be requested in a PROPFIND request
   static const defaultFindProperties = [
     'resourcetype',
     'getcontenttype',

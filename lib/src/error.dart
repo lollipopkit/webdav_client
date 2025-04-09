@@ -110,6 +110,7 @@ class WebdavException<T extends Object?> implements Exception {
   }
 }
 
-WebdavException<T> _newResponseError<T extends Object?>(Response<T> resp, [String? message]) {
+WebdavException<T> _newResponseError<T extends Object?>(Response<T> resp,
+    [String? message]) {
   return WebdavException.fromResponse(resp, message);
 }

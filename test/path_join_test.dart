@@ -19,7 +19,8 @@ void main() {
       expect(joinPath('folder//', 'file.txt'), equals('folder/file.txt'));
       expect(joinPath('folder', '//file.txt'), equals('folder/file.txt'));
       expect(joinPath('folder///', '///file.txt'), equals('folder/file.txt'));
-      expect(joinPath('a///b', '///c///d'), equals('a///b/c///d')); // 注意：只处理连接处的斜杠
+      expect(
+          joinPath('a///b', '///c///d'), equals('a///b/c///d')); // 注意：只处理连接处的斜杠
     });
 
     test('empty', () {
@@ -32,8 +33,8 @@ void main() {
       expect(joinPath('/', '/'), equals('/'));
       expect(joinPath('/', 'file.txt'), equals('/file.txt'));
       expect(joinPath('/folder', '/'), equals('/folder/'));
-      expect(joinPath('/remote.php/dav/files/admin', 'Documents'), 
-             equals('/remote.php/dav/files/admin/Documents'));
+      expect(joinPath('/remote.php/dav/files/admin', 'Documents'),
+          equals('/remote.php/dav/files/admin/Documents'));
     });
 
     test('root', () {

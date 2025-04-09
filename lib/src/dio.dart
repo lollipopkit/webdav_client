@@ -653,6 +653,6 @@ extension on _WdDio {
     if (parentPath == '' || parentPath == '/') {
       return null;
     }
-    return client.mkdirAll(parentPath, cancelToken);
+    return client.mkdirAll(parentPath, cancelToken: cancelToken);
   }
 }

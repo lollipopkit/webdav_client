@@ -77,8 +77,12 @@ class WebdavClient {
     }
   }
 
-  Future<(double percent, String size)> quota(
-      {CancelToken? cancelToken}) async {
+  /// Get the quota of the server
+  ///
+  /// - [cancelToken] for cancelling the request
+  Future<(double percent, String size)> quota({
+    CancelToken? cancelToken,
+  }) async {
     final resp = await _client.wdPropfind(
       '/',
       PropsDepth.zero,
@@ -115,6 +119,12 @@ class WebdavClient {
   }
 
   /// Read all files in a folder
+  ///
+  /// - [path] of the folder
+  /// - [depth] of the PROPFIND request
+  /// - [properties] is a list of properties to read
+  /// - [cancelToken] for cancelling the request
+  /// - [findType] is the type of PROPFIND request
   Future<List<WebdavFile>> readDir(
     String path, {
     PropsDepth depth = PropsDepth.one,
@@ -145,6 +155,11 @@ class WebdavClient {
   }
 
   /// Read a single files properties
+  ///
+  /// - [path] of the file
+  /// - [properties] is a list of properties to read
+  /// - [cancelToken] for cancelling the request
+  /// - [findType] is the type of PROPFIND request
   Future<WebdavFile?> readProps(
     String path, {
     CancelToken? cancelToken,
@@ -174,7 +189,10 @@ class WebdavClient {
   }
 
   /// Create a folder
-  Future<void> mkdir(String path, [CancelToken? cancelToken]) async {
+  ///
+  /// - [path] of the folder
+  /// - [cancelToken] for cancelling the request
+  Future<void> mkdir(String path, {CancelToken? cancelToken}) async {
     path = _fixCollectionPath(path);
     var resp = await _client.wdMkcol(path, cancelToken: cancelToken);
     var status = resp.statusCode;
@@ -184,7 +202,10 @@ class WebdavClient {
   }
 
   /// Recursively create folders
-  Future<void> mkdirAll(String path, [CancelToken? cancelToken]) async {
+  ///
+  /// - [path] of the folder
+  /// - [cancelToken] for cancelling the request
+  Future<void> mkdirAll(String path, {CancelToken? cancelToken}) async {
     path = _fixCollectionPath(path);
     final resp = await _client.wdMkcol(path, cancelToken: cancelToken);
     final status = resp.statusCode;
@@ -212,12 +233,18 @@ class WebdavClient {
 
   /// Remove a folder or file
   /// If you remove the folder, some webdav services require a '/' at the end of the path.
-  Future<void> remove(String path, [CancelToken? cancelToken]) {
-    return removeAll(path, cancelToken);
+  ///
+  /// - [path] of the resource
+  /// - [cancelToken] for cancelling the request
+  Future<void> remove(String path, {CancelToken? cancelToken}) {
+    return removeAll(path, cancelToken: cancelToken);
   }
 
   /// Remove files
-  Future<void> removeAll(String path, [CancelToken? cancelToken]) async {
+  ///
+  /// - [path] of the resource
+  /// - [cancelToken] for cancelling the request
+  Future<void> removeAll(String path, {CancelToken? cancelToken}) async {
     final resp = await _client.wdDelete(path, cancelToken: cancelToken);
     if (resp.statusCode == 200 ||
         resp.statusCode == 204 ||
@@ -264,6 +291,12 @@ class WebdavClient {
   /// Move a folder or file
   /// If you move the folder, some webdav services require a '/' at the end of the path.
   ///
+  /// - [oldPath] of the resource
+  /// - [newPath] of the resource
+  /// - [overwrite] If true, the destination will be overwritten
+  /// - [cancelToken] for cancelling the request
+  /// - [depth] of the PROPFIND request
+  ///
   /// {@macro webdav_client_rename}
   Future<void> move(
     String oldPath,
@@ -281,12 +314,16 @@ class WebdavClient {
     );
   }
 
-  /// Copy a file / folder from A to B.
+  /// Copy a file / folder.
   ///
-  /// If copied the folder (A > B), it will copy all the contents of folder A to folder B.
+  /// - [oldPath] of the resource
+  /// - [newPath] of the resource
+  /// - [overwrite] If true, the destination will be overwritten
+  /// - [cancelToken] for cancelling the request
   ///
   /// **Warning:**
-  /// Some webdav services have been tested and found to **delete** the original contents of the B folder!!!
+  /// If copied the folder (A > B), it will copy all the contents of folder A to folder B.
+  /// Some webdav services have been tested and found to **delete** the original contents of the B folder.
   Future<void> copy(
     String oldPath,
     String newPath, {
@@ -303,7 +340,10 @@ class WebdavClient {
   }
 
   /// Read the bytes of a file
-  /// It is best not to open debug mode, otherwise the byte data is too large and the output results in IDE cards, 😄
+  ///
+  /// - [path] of the file
+  /// - [onProgress] callback for progress
+  /// - [cancelToken] for cancelling the request
   Future<List<int>> read(
     String path, {
     void Function(int count, int total)? onProgress,
@@ -317,6 +357,11 @@ class WebdavClient {
   }
 
   /// Read the bytes of a file with stream and write to a local file
+  ///
+  /// - [remotePath] of the file
+  /// - [localPath] of the local file
+  /// - [onProgress] callback for progress
+  /// - [cancelToken] for cancelling the request
   Future<void> readFile(
     String remotePath,
     String localPath, {
@@ -332,6 +377,11 @@ class WebdavClient {
   }
 
   /// Write the bytes to remote path
+  ///
+  /// - [path] of the file
+  /// - [data] to write
+  /// - [onProgress] callback for progress
+  /// - [cancelToken] for cancelling the request
   Future<void> write(
     String path,
     Uint8List data, {
@@ -347,6 +397,11 @@ class WebdavClient {
   }
 
   /// Read local file stream and write to remote file
+  ///
+  /// - [localPath] of the local file
+  /// - [remotePath] of the remote file
+  /// - [onProgress] callback for progress
+  /// - [cancelToken] for cancelling the request
   Future<void> writeFile(
     String localPath,
     String remotePath, {
@@ -364,6 +419,9 @@ class WebdavClient {
   }
 
   /// Check if a resource exists
+  ///
+  /// - [path] of the resource
+  /// - [cancelToken] for cancelling the request
   Future<bool> exists(String path, {CancelToken? cancelToken}) async {
     try {
       await readProps(path, cancelToken: cancelToken);
@@ -473,8 +531,15 @@ class WebdavClient {
   }
 
   /// Unlock a resource
-  Future<void> unlock(String path, String lockToken,
-      [CancelToken? cancelToken]) async {
+  ///
+  /// - [path] of the resource
+  /// - [lockToken] of the resource
+  /// - [cancelToken] for cancelling the request
+  Future<void> unlock(
+    String path,
+    String lockToken, {
+    CancelToken? cancelToken,
+  }) async {
     await _client.wdUnlock(path, lockToken, cancelToken: cancelToken);
   }
 
@@ -512,6 +577,7 @@ class WebdavClient {
   }
 
   /// Put a resource according to the conditions
+  ///
   /// - [path] of the resource
   /// - [data] to write
   /// - [lockToken] If the resource is locked, the lock token must match
@@ -544,6 +610,7 @@ class WebdavClient {
   }
 
   /// Modify properties of a resource
+  ///
   /// - [path] of the resource
   /// - [setProps] is a map of key-value pairs to set
   /// - [removeProps] is a list of keys to remove

@@ -39,6 +39,7 @@ class WebdavFile {
   /// Custom properties
   final Map<String, String> customProps;
 
+  /// Constructor for [WebdavFile]
   const WebdavFile({
     required this.path,
     required this.isDir,
