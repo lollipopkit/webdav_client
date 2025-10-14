@@ -158,13 +158,23 @@ class _WdDio with DioMixin {
   Future<Response<void>> wdOptions(
     String path, {
     CancelToken? cancelToken,
-  }) {
-    return req(
+    bool allowNotFound = false,
+  }) async {
+    final resp = await req(
       'OPTIONS',
       path,
       optionsHandler: (options) => options.headers?['depth'] = '0',
       cancelToken: cancelToken,
     );
+
+    final status = resp.statusCode ?? -1;
+    final success = status >= 200 && status < 300;
+
+    if (success || (allowNotFound && status == 404)) {
+      return resp;
+    }
+
+    throw _newResponseError(resp);
   }
 
   // // quota
@@ -272,11 +282,8 @@ class _WdDio with DioMixin {
     void Function(int count, int total)? onProgress,
     CancelToken? cancelToken,
   }) async {
-    // fix auth error
-    var pResp = await wdOptions(path, cancelToken: cancelToken);
-    if (pResp.statusCode != 200) {
-      throw _newResponseError(pResp);
-    }
+    // RFC 4918 §10.1 & RFC 7231 allow a range of 2xx responses to OPTIONS.
+    await wdOptions(path, cancelToken: cancelToken);
 
     final resp = await req(
       'GET',
@@ -321,11 +328,8 @@ class _WdDio with DioMixin {
     void Function(int count, int total)? onProgress,
     CancelToken? cancelToken,
   }) async {
-    // Check if the file exists
-    final pResp = await wdOptions(path, cancelToken: cancelToken);
-    if (pResp.statusCode != 200) {
-      throw _newResponseError(pResp);
-    }
+    // Pre-flight respecting RFC-compliant OPTIONS responses.
+    await wdOptions(path, cancelToken: cancelToken);
 
     final Response<ResponseBody> resp;
 
@@ -502,10 +506,11 @@ class _WdDio with DioMixin {
     void Function(int count, int total)? onProgress,
     CancelToken? cancelToken,
   }) async {
-    final pResp = await wdOptions(path, cancelToken: cancelToken);
-    if (pResp.statusCode != 200) {
-      throw _newResponseError(pResp);
-    }
+    await wdOptions(
+      path,
+      cancelToken: cancelToken,
+      allowNotFound: true,
+    );
 
     // mkdir
     await _createParent(path, cancelToken: cancelToken);
@@ -540,11 +545,11 @@ class _WdDio with DioMixin {
     void Function(int count, int total)? onProgress,
     CancelToken? cancelToken,
   }) async {
-    // fix auth error
-    final pResp = await wdOptions(path, cancelToken: cancelToken);
-    if (pResp.statusCode != 200) {
-      throw _newResponseError(pResp);
-    }
+    await wdOptions(
+      path,
+      cancelToken: cancelToken,
+      allowNotFound: true,
+    );
 
     // mkdir
     await _createParent(path, cancelToken: cancelToken);
