@@ -476,6 +476,12 @@ class WebdavClient {
     bool refreshLock = false,
     CancelToken? cancelToken,
   }) async {
+    if (depth == PropsDepth.one) {
+      throw ArgumentError(
+        'LOCK depth must be 0 or infinity per RFC 4918 §9.10.3',
+      );
+    }
+
     if (refreshLock) {
       if (ifHeader == null) {
         throw WebdavException(
@@ -606,7 +612,12 @@ class WebdavClient {
     });
 
     final xmlString = xmlBuilder.buildDocument().toString();
-    await _client.wdProppatch(path, xmlString, cancelToken: cancelToken);
+    final resp = await _client.wdProppatch(
+      path,
+      xmlString,
+      cancelToken: cancelToken,
+    );
+    _ensurePropPatchSuccess(resp);
   }
 
   /// Put a resource according to the conditions
@@ -716,44 +727,51 @@ class WebdavClient {
       xmlString,
       cancelToken: cancelToken,
     );
+    _ensurePropPatchSuccess(resp);
+  }
+}
 
-    // Check if any properties failed to update
-    if (resp.statusCode == 207) {
-      final xmlDocument = XmlDocument.parse(resp.data as String);
-      final responseElements = findAllElements(xmlDocument, 'response');
+List<String> parsePropPatchFailureMessages(String xmlString) {
+  final document = XmlDocument.parse(xmlString);
+  final failures = <String>[];
 
-      for (final response in responseElements) {
-        final propstatElements = findElements(response, 'propstat');
-        for (final propstat in propstatElements) {
-          final statusElement = findElements(propstat, 'status').firstOrNull;
-          if (statusElement != null) {
-            final statusText = statusElement.innerText;
-            // Check non-200 status codes
-            if (!statusText.contains('200') && !statusText.contains('204')) {
-              final href = getElementText(response, 'href') ?? '';
+  int? parseStatusCode(String statusText) {
+    final match = RegExp(r'\b(\d{3})\b').firstMatch(statusText);
+    if (match == null) return null;
+    return int.tryParse(match.group(1)!);
+  }
 
-              // Get the prop names that failed for better error messages
-              final failedProps = <String>[];
-              final propElement = findElements(propstat, 'prop').firstOrNull;
-              if (propElement != null) {
-                for (var prop in propElement.childElements) {
-                  failedProps.add(prop.name.qualified);
-                }
-              }
+  final responseElements = findAllElements(document, 'response');
+  for (final response in responseElements) {
+    final propstatElements = findElements(response, 'propstat');
+    for (final propstat in propstatElements) {
+      final statusElement = findElements(propstat, 'status').firstOrNull;
+      if (statusElement == null) {
+        continue;
+      }
 
-              throw WebdavException(
-                message:
-                    'Failed to update properties for $href: $statusText. Failed props: $failedProps',
-                statusCode: 422,
-              );
-            }
-          }
+      final statusText = statusElement.innerText;
+      final statusCode = parseStatusCode(statusText);
+      if (statusCode != null && statusCode < 400) {
+        continue;
+      }
+
+      final href = getElementText(response, 'href') ?? '';
+      final failedProps = <String>[];
+      final propElement = findElements(propstat, 'prop').firstOrNull;
+      if (propElement != null) {
+        for (final prop in propElement.childElements) {
+          failedProps.add(prop.name.qualified);
         }
       }
-    } else if (resp.statusCode != 200) {
-      throw _newResponseError(resp);
+
+      failures.add(
+        'Failed to update properties for $href: $statusText. Failed props: $failedProps',
+      );
     }
   }
+
+  return failures;
 }
 
 extension _Utils on WebdavClient {
@@ -884,5 +902,37 @@ extension _Utils on WebdavClient {
       return '$path/';
     }
     return path;
+  }
+
+  void _ensurePropPatchSuccess(Response<String> resp) {
+    final xmlString = resp.data;
+    if (xmlString == null) {
+      throw WebdavException(
+        message:
+            'PROPPATCH response did not include a multi-status body to inspect',
+        statusCode: resp.statusCode,
+        statusMessage: resp.statusMessage,
+        response: resp,
+      );
+    }
+
+    try {
+      final failures = parsePropPatchFailureMessages(xmlString);
+      if (failures.isNotEmpty) {
+        throw WebdavException(
+          message: failures.join('; '),
+          statusCode: 422,
+          statusMessage: resp.statusMessage,
+          response: resp,
+        );
+      }
+    } on XmlException catch (error) {
+      throw WebdavException(
+        message: 'Unable to parse PROPPATCH response: $error',
+        statusCode: resp.statusCode,
+        statusMessage: resp.statusMessage,
+        response: resp,
+      );
+    }
   }
 }

@@ -520,11 +520,11 @@ class _WdDio with DioMixin {
       path,
       data: data,
       optionsHandler: (options) {
-        options.headers?['content-length'] = data.length;
-
-        if (additionalHeaders != null) {
-          options.headers?.addAll(additionalHeaders);
-        }
+        final headers = buildPutHeaders(
+          contentLength: data.length,
+          additionalHeaders: additionalHeaders,
+        );
+        options.headers?.addAll(headers);
       },
       onSendProgress: onProgress,
       cancelToken: cancelToken,
@@ -559,8 +559,10 @@ class _WdDio with DioMixin {
       path,
       data: data,
       optionsHandler: (options) {
-        options.headers?['content-length'] = length;
-        options.headers?['content-type'] = 'application/octet-stream';
+        final headers = buildPutHeaders(
+          contentLength: length,
+        );
+        options.headers?.addAll(headers);
       },
       onSendProgress: onProgress,
       cancelToken: cancelToken,
@@ -647,6 +649,35 @@ class _WdDio with DioMixin {
 
     return resp;
   }
+}
+
+Map<String, dynamic> buildPutHeaders({
+  required int contentLength,
+  Map<String, dynamic>? additionalHeaders,
+  bool includeDefaultContentType = true,
+}) {
+  final headers = <String, dynamic>{
+    Headers.contentLengthHeader: contentLength.toString(),
+  };
+
+  if (includeDefaultContentType) {
+    headers[Headers.contentTypeHeader] = 'application/octet-stream';
+  }
+
+  if (additionalHeaders != null && additionalHeaders.isNotEmpty) {
+    additionalHeaders.forEach((key, value) {
+      final lower = key.toLowerCase();
+      if (lower == Headers.contentTypeHeader) {
+        headers[Headers.contentTypeHeader] = value;
+      } else if (lower == Headers.contentLengthHeader) {
+        headers[Headers.contentLengthHeader] = value;
+      } else {
+        headers[key] = value;
+      }
+    });
+  }
+
+  return headers;
 }
 
 extension on _WdDio {
