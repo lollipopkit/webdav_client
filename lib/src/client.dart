@@ -111,10 +111,27 @@ class WebdavClient {
       );
     }
 
-    final percent = quotaUsed / quotaAvailable;
+    String formatSize(int bytes) {
+      final mb = bytes / 1024 / 1024;
+      return '${mb.toStringAsFixed(2)}M';
+    }
+
+    if (quotaAvailable < 0) {
+      return (
+        double.nan,
+        '${formatSize(quotaUsed)}/unlimited',
+      );
+    }
+
+    final total = quotaUsed + quotaAvailable;
+    if (total <= 0) {
+      return (0.0, '0M/0M');
+    }
+
+    final percent = quotaUsed / total;
     return (
       percent,
-      '${quotaUsed / 1024 / 1024}M/${quotaAvailable / 1024 / 1024}M'
+      '${formatSize(quotaUsed)}/${formatSize(total)}',
     );
   }
 
@@ -129,12 +146,16 @@ class WebdavClient {
     String path, {
     PropsDepth depth = PropsDepth.one,
     List<String> properties = PropfindType.defaultFindProperties,
+    Map<String, String> namespaces = const <String, String>{},
     CancelToken? cancelToken,
     PropfindType findType = PropfindType.prop,
   }) async {
     path = _fixCollectionPath(path);
 
-    final xmlStr = findType.buildXmlStr(properties);
+    final xmlStr = findType.buildXmlStr(
+      properties,
+      namespaceMap: namespaces,
+    );
 
     final resp = await _client.wdPropfind(
       path,
@@ -165,10 +186,14 @@ class WebdavClient {
     CancelToken? cancelToken,
     PropfindType findType = PropfindType.prop,
     List<String> properties = PropfindType.defaultFindProperties,
+    Map<String, String> namespaces = const <String, String>{},
   }) async {
     // path = _fixSlashes(path);
 
-    final xmlStr = findType.buildXmlStr(properties);
+    final xmlStr = findType.buildXmlStr(
+      properties,
+      namespaceMap: namespaces,
+    );
 
     final resp = await _client.wdPropfind(
       path,
@@ -550,24 +575,32 @@ class WebdavClient {
   Future<void> setProps(
     String path,
     Map<String, String> properties, {
+    Map<String, String> namespaces = const <String, String>{},
     CancelToken? cancelToken,
   }) async {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:propertyupdate', nest: () {
-      xmlBuilder.namespace('d', 'DAV:');
+      xmlBuilder.namespace('DAV:', 'd');
+
+      final resolution = resolvePropertyNames(
+        properties.keys,
+        namespaceMap: namespaces,
+      );
+
+      resolution.namespaces.forEach((prefix, uri) {
+        if (prefix == 'd') return;
+        xmlBuilder.namespace(uri, prefix);
+      });
+
       xmlBuilder.element('d:set', nest: () {
         xmlBuilder.element('d:prop', nest: () {
-          properties.forEach((key, value) {
-            final parts = key.split(':');
-            if (parts.length == 2) {
-              final prefix = parts[0];
-              final propName = parts[1];
-              xmlBuilder.element('$prefix:$propName', nest: value);
-            } else {
-              xmlBuilder.element('d:$key', nest: value);
-            }
-          });
+          final entries = properties.entries.toList();
+          for (var i = 0; i < resolution.properties.length; i++) {
+            final prop = resolution.properties[i];
+            final value = entries[i].value;
+            xmlBuilder.element(prop.qualifiedName, nest: value);
+          }
         });
       });
     });
@@ -619,62 +652,58 @@ class WebdavClient {
     String path, {
     Map<String, String>? setProps,
     List<String>? removeProps,
+    Map<String, String> namespaces = const <String, String>{},
     CancelToken? cancelToken,
   }) async {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:propertyupdate', nest: () {
-      xmlBuilder.namespace('d', 'DAV:');
+      xmlBuilder.namespace('DAV:', 'd');
 
-      // Add common namespace declarations for all custom properties
-      final allProps = <String>{};
-      if (setProps != null) allProps.addAll(setProps.keys);
-      if (removeProps != null) allProps.addAll(removeProps);
+      final setResolution = (setProps != null && setProps.isNotEmpty)
+          ? resolvePropertyNames(
+              setProps.keys,
+              namespaceMap: namespaces,
+            )
+          : null;
+      final removeResolution = (removeProps != null && removeProps.isNotEmpty)
+          ? resolvePropertyNames(
+              removeProps,
+              namespaceMap: namespaces,
+            )
+          : null;
 
-      final namespaces = <String>{};
-      for (final prop in allProps) {
-        final parts = prop.split(':');
-        if (parts.length == 2 && parts[0] != 'd') {
-          namespaces.add(parts[0]);
-        }
+      final namespaceDeclarations = <String, String>{};
+      if (setResolution != null) {
+        namespaceDeclarations.addAll(setResolution.namespaces);
+      }
+      if (removeResolution != null) {
+        namespaceDeclarations.addAll(removeResolution.namespaces);
       }
 
-      // Register all namespaces at the root level
-      for (final ns in namespaces) {
-        xmlBuilder.namespace(ns, 'http://example.com/ns/$ns');
-      }
+      namespaceDeclarations.forEach((prefix, uri) {
+        if (prefix == 'd') return;
+        xmlBuilder.namespace(uri, prefix);
+      });
 
-      // Set properties
-      if (setProps != null && setProps.isNotEmpty) {
+      if (setResolution != null) {
+        final entries = setProps!.entries.toList();
         xmlBuilder.element('d:set', nest: () {
           xmlBuilder.element('d:prop', nest: () {
-            setProps.forEach((key, value) {
-              final parts = key.split(':');
-              if (parts.length == 2) {
-                final prefix = parts[0];
-                final propName = parts[1];
-                xmlBuilder.element('$prefix:$propName', nest: value);
-              } else {
-                xmlBuilder.element('d:$key', nest: value);
-              }
-            });
+            for (var i = 0; i < setResolution.properties.length; i++) {
+              final prop = setResolution.properties[i];
+              final value = entries[i].value;
+              xmlBuilder.element(prop.qualifiedName, nest: value);
+            }
           });
         });
       }
 
-      // Delete properties
-      if (removeProps != null && removeProps.isNotEmpty) {
+      if (removeResolution != null) {
         xmlBuilder.element('d:remove', nest: () {
           xmlBuilder.element('d:prop', nest: () {
-            for (final key in removeProps) {
-              final parts = key.split(':');
-              if (parts.length == 2) {
-                final prefix = parts[0];
-                final propName = parts[1];
-                xmlBuilder.element('$prefix:$propName');
-              } else {
-                xmlBuilder.element('d:$key');
-              }
+            for (final prop in removeResolution.properties) {
+              xmlBuilder.element(prop.qualifiedName);
             }
           });
         });
@@ -810,8 +839,9 @@ extension _Utils on WebdavClient {
     }
 
     if (etag != null) {
-      // 确保 ETag 格式正确
-      resourceConditions.add(notTag ? '(Not ["$etag"])' : '(["$etag"])');
+      final formattedEtag = _formatEntityTag(etag);
+      resourceConditions
+          .add(notTag ? '(Not [$formattedEtag])' : '([$formattedEtag])');
     }
 
     if (resourceConditions.isNotEmpty) {
@@ -820,6 +850,30 @@ extension _Utils on WebdavClient {
     }
 
     return conditions.join(' ');
+  }
+
+  String _formatEntityTag(String etag) {
+    var trimmed = etag.trim();
+    var isWeak = false;
+
+    if (trimmed.startsWith('W/')) {
+      isWeak = true;
+      trimmed = trimmed.substring(2).trim();
+    }
+
+    final normalized = _ensureQuoted(trimmed);
+    return isWeak ? 'W/$normalized' : normalized;
+  }
+
+  String _ensureQuoted(String value) {
+    var result = value.trim();
+    if (!result.startsWith('"')) {
+      result = '"$result';
+    }
+    if (!result.endsWith('"')) {
+      result = '$result"';
+    }
+    return result;
   }
 
   String _fixCollectionPath(String path) {

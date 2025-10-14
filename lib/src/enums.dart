@@ -1,3 +1,4 @@
+import 'package:webdav_client_plus/src/utils.dart';
 import 'package:xml/xml.dart';
 
 /// Depth of the PROPFIND request
@@ -35,9 +36,12 @@ enum PropfindType {
   ;
 
   /// Build the XML string for the PROPFIND request
-  String buildXmlStr(List<String> properties) {
+  String buildXmlStr(
+    List<String> properties, {
+    Map<String, String> namespaceMap = const <String, String>{},
+  }) {
     return switch (this) {
-      prop => _buildPropXml(properties),
+      prop => _buildPropXml(properties, namespaceMap: namespaceMap),
       allprop => _buildAllPropXml(),
       propname => _buildPropNameXml(),
     };
@@ -54,40 +58,28 @@ enum PropfindType {
     'displayname',
   ];
 
-  static String _buildPropXml(List<String> properties) {
+  static String _buildPropXml(
+    List<String> properties, {
+    Map<String, String> namespaceMap = const <String, String>{},
+  }) {
+    final resolution = resolvePropertyNames(
+      properties,
+      namespaceMap: namespaceMap,
+    );
+
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:propfind', nest: () {
       xmlBuilder.namespace('DAV:', 'd');
 
-      // Collect all namespaces
-      final namespaces = <String, String>{};
-      for (final prop in properties) {
-        if (prop.contains(':')) {
-          final parts = prop.split(':');
-          final prefix = parts[0];
-          if (prefix != 'd' && !namespaces.containsKey(prefix)) {
-            namespaces[prefix] = 'http://example.com/ns/$prefix';
-          }
-        }
-      }
-
-      // Add namespaces to the XML
-      namespaces.forEach((prefix, uri) {
-        xmlBuilder.namespace(prefix, uri);
+      resolution.namespaces.forEach((prefix, uri) {
+        if (prefix == 'd') return;
+        xmlBuilder.namespace(uri, prefix);
       });
 
       xmlBuilder.element('d:prop', nest: () {
-        for (final prop in properties) {
-          // Process all properties
-          if (prop.contains(':')) {
-            final parts = prop.split(':');
-            final prefix = parts[0];
-            final name = parts[1];
-            xmlBuilder.element('$prefix:$name');
-          } else {
-            xmlBuilder.element('d:$prop');
-          }
+        for (final prop in resolution.properties) {
+          xmlBuilder.element(prop.qualifiedName);
         }
       });
     });

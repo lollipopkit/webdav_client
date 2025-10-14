@@ -132,7 +132,7 @@ final class DigestAuth extends Auth {
     _nonceCount++;
 
     // Format nonce count as 8 digit hex
-    final nc = _nonceCount.toString().padLeft(8, '0');
+    final nc = _nonceCount.toRadixString(16).padLeft(8, '0');
 
     final cnonce = computeNonce();
     final ha1 = _computeHA1(cnonce);
