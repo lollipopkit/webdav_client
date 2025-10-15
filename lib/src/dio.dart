@@ -229,13 +229,39 @@ class _WdDio with DioMixin {
   }
 
   /// MKCOL
-  Future<Response<void>> wdMkcol(String path, {CancelToken? cancelToken}) {
-    return req('MKCOL', path, cancelToken: cancelToken);
+  Future<Response<void>> wdMkcol(
+    String path, {
+    CancelToken? cancelToken,
+    String? ifHeader,
+  }) {
+    return req(
+      'MKCOL',
+      path,
+      optionsHandler: (options) {
+        if (ifHeader != null && ifHeader.isNotEmpty) {
+          options.headers?['If'] = ifHeader;
+        }
+      },
+      cancelToken: cancelToken,
+    );
   }
 
   /// DELETE
-  Future<Response<void>> wdDelete(String path, {CancelToken? cancelToken}) {
-    return req('DELETE', path, cancelToken: cancelToken);
+  Future<Response<void>> wdDelete(
+    String path, {
+    CancelToken? cancelToken,
+    String? ifHeader,
+  }) {
+    return req(
+      'DELETE',
+      path,
+      optionsHandler: (options) {
+        if (ifHeader != null && ifHeader.isNotEmpty) {
+          options.headers?['If'] = ifHeader;
+        }
+      },
+      cancelToken: cancelToken,
+    );
   }
 
   /// COPY OR MOVE
@@ -246,6 +272,7 @@ class _WdDio with DioMixin {
     bool overwrite, {
     CancelToken? cancelToken,
     PropsDepth depth = PropsDepth.infinity,
+    String? ifHeader,
   }) async {
     final method = isCopy == true ? 'COPY' : 'MOVE';
     final resp = await req(
@@ -259,6 +286,9 @@ class _WdDio with DioMixin {
         options.headers?['destination'] = destinationHeader;
         options.headers?['overwrite'] = overwrite == true ? 'T' : 'F';
         options.headers?['depth'] = depth.value;
+        if (ifHeader != null && ifHeader.isNotEmpty) {
+          options.headers?['If'] = ifHeader;
+        }
         options.responseType = ResponseType.plain;
       },
       cancelToken: cancelToken,
@@ -297,7 +327,11 @@ class _WdDio with DioMixin {
     } else if (status >= 200 && status < 300) {
       return;
     } else if (status == 409) {
-      await _createParent(newPath, cancelToken: cancelToken);
+      await _createParent(
+        newPath,
+        cancelToken: cancelToken,
+        ifHeader: ifHeader,
+      );
       return wdCopyMove(
         oldPath,
         newPath,
@@ -305,6 +339,7 @@ class _WdDio with DioMixin {
         overwrite,
         cancelToken: cancelToken,
         depth: depth,
+        ifHeader: ifHeader,
       );
     } else {
       throw _newResponseError(resp);
@@ -728,12 +763,20 @@ extension on _WdDio {
   }
 
   /// create parent folder
-  Future<void>? _createParent(String path, {CancelToken? cancelToken}) {
+  Future<void>? _createParent(
+    String path, {
+    CancelToken? cancelToken,
+    String? ifHeader,
+  }) {
     final parentPath = path.substring(0, path.lastIndexOf('/') + 1);
 
     if (parentPath == '' || parentPath == '/') {
       return null;
     }
-    return client.mkdirAll(parentPath, cancelToken: cancelToken);
+    return client.mkdirAll(
+      parentPath,
+      cancelToken: cancelToken,
+      ifHeader: ifHeader,
+    );
   }
 }

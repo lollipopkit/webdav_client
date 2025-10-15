@@ -72,7 +72,8 @@ class WebdavClient {
   /// Test whether the service can connect
   Future<void> ping([CancelToken? cancelToken]) async {
     final resp = await _client.wdOptions('/', cancelToken: cancelToken);
-    if (resp.statusCode != 200) {
+    final status = resp.statusCode ?? 0;
+    if (status < 200 || status >= 300) {
       throw _newResponseError(resp);
     }
   }
@@ -217,9 +218,18 @@ class WebdavClient {
   ///
   /// - [path] of the folder
   /// - [cancelToken] for cancelling the request
-  Future<void> mkdir(String path, {CancelToken? cancelToken}) async {
+  /// - [ifHeader] supplies preconditions such as lock tokens via an HTTP If header
+  Future<void> mkdir(
+    String path, {
+    CancelToken? cancelToken,
+    String? ifHeader,
+  }) async {
     path = _fixCollectionPath(path);
-    var resp = await _client.wdMkcol(path, cancelToken: cancelToken);
+    final resp = await _client.wdMkcol(
+      path,
+      cancelToken: cancelToken,
+      ifHeader: ifHeader,
+    );
     var status = resp.statusCode;
     if (status != 201 && status != 405) {
       throw _newResponseError(resp);
@@ -230,9 +240,18 @@ class WebdavClient {
   ///
   /// - [path] of the folder
   /// - [cancelToken] for cancelling the request
-  Future<void> mkdirAll(String path, {CancelToken? cancelToken}) async {
+  /// - [ifHeader] supplies preconditions such as lock tokens via an HTTP If header
+  Future<void> mkdirAll(
+    String path, {
+    CancelToken? cancelToken,
+    String? ifHeader,
+  }) async {
     path = _fixCollectionPath(path);
-    final resp = await _client.wdMkcol(path, cancelToken: cancelToken);
+    final resp = await _client.wdMkcol(
+      path,
+      cancelToken: cancelToken,
+      ifHeader: ifHeader,
+    );
     final status = resp.statusCode;
     if (status == 201 || status == 405) {
       return;
@@ -245,7 +264,11 @@ class WebdavClient {
           continue;
         }
         sub += '$e/';
-        final resp = await _client.wdMkcol(sub, cancelToken: cancelToken);
+        final resp = await _client.wdMkcol(
+          sub,
+          cancelToken: cancelToken,
+          ifHeader: ifHeader,
+        );
         final status = resp.statusCode;
         if (status != 201 && status != 405) {
           throw _newResponseError(resp);
@@ -261,16 +284,34 @@ class WebdavClient {
   ///
   /// - [path] of the resource
   /// - [cancelToken] for cancelling the request
-  Future<void> remove(String path, {CancelToken? cancelToken}) {
-    return removeAll(path, cancelToken: cancelToken);
+  /// - [ifHeader] supplies preconditions such as lock tokens via an HTTP If header
+  Future<void> remove(
+    String path, {
+    CancelToken? cancelToken,
+    String? ifHeader,
+  }) {
+    return removeAll(
+      path,
+      cancelToken: cancelToken,
+      ifHeader: ifHeader,
+    );
   }
 
   /// Remove files
   ///
   /// - [path] of the resource
   /// - [cancelToken] for cancelling the request
-  Future<void> removeAll(String path, {CancelToken? cancelToken}) async {
-    final resp = await _client.wdDelete(path, cancelToken: cancelToken);
+  /// - [ifHeader] supplies preconditions such as lock tokens via an HTTP If header
+  Future<void> removeAll(
+    String path, {
+    CancelToken? cancelToken,
+    String? ifHeader,
+  }) async {
+    final resp = await _client.wdDelete(
+      path,
+      cancelToken: cancelToken,
+      ifHeader: ifHeader,
+    );
     if (resp.statusCode == 200 ||
         resp.statusCode == 204 ||
         resp.statusCode == 404) {
@@ -288,6 +329,7 @@ class WebdavClient {
   /// - [overwrite] If true, the destination will be overwritten
   /// - [cancelToken] for cancelling the request
   /// - [depth] of the PROPFIND request
+  /// - [ifHeader] supplies preconditions such as lock tokens via an HTTP If header
   /// {@endtemplate}
   Future<void> rename(
     String oldPath,
@@ -295,6 +337,7 @@ class WebdavClient {
     bool overwrite = false,
     CancelToken? cancelToken,
     PropsDepth? depth,
+    String? ifHeader,
   }) {
     if (depth != null &&
         depth != PropsDepth.infinity &&
@@ -310,6 +353,7 @@ class WebdavClient {
       overwrite,
       cancelToken: cancelToken,
       depth: depth ?? PropsDepth.infinity,
+      ifHeader: ifHeader,
     );
   }
 
@@ -320,6 +364,7 @@ class WebdavClient {
   /// - [newPath] of the resource
   /// - [overwrite] If true, the destination will be overwritten
   /// - [cancelToken] for cancelling the request
+  /// - [ifHeader] supplies preconditions such as lock tokens via an HTTP If header
   /// - [depth] of the PROPFIND request
   ///
   /// {@macro webdav_client_rename}
@@ -329,6 +374,7 @@ class WebdavClient {
     bool overwrite = false,
     CancelToken? cancelToken,
     PropsDepth? depth,
+    String? ifHeader,
   }) {
     return rename(
       oldPath,
@@ -336,6 +382,7 @@ class WebdavClient {
       overwrite: overwrite,
       cancelToken: cancelToken,
       depth: depth,
+      ifHeader: ifHeader,
     );
   }
 
@@ -345,6 +392,7 @@ class WebdavClient {
   /// - [newPath] of the resource
   /// - [overwrite] If true, the destination will be overwritten
   /// - [cancelToken] for cancelling the request
+  /// - [ifHeader] supplies preconditions such as lock tokens via an HTTP If header
   ///
   /// **Warning:**
   /// If copied the folder (A > B), it will copy all the contents of folder A to folder B.
@@ -354,6 +402,7 @@ class WebdavClient {
     String newPath, {
     bool overwrite = false,
     CancelToken? cancelToken,
+    String? ifHeader,
   }) {
     return _client.wdCopyMove(
       oldPath,
@@ -361,6 +410,7 @@ class WebdavClient {
       true,
       overwrite,
       cancelToken: cancelToken,
+      ifHeader: ifHeader,
     );
   }
 

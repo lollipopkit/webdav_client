@@ -95,3 +95,11 @@ client.mkdir('/dir', cancel)
 });
 cancel.cancel('reason')
 ```
+
+## Testing
+
+The WebDAV integration specs spawn a temporary [dufs](https://github.com/sigoden/dufs) server on `localhost`. Install `dufs` and ensure it is available on your `PATH`, then run:
+
+```shell
+dart test
+```

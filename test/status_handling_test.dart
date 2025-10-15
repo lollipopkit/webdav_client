@@ -4,6 +4,26 @@ import 'package:test/test.dart';
 import 'package:webdav_client_plus/webdav_client_plus.dart';
 
 void main() {
+  test('ping accepts any successful 2xx response from OPTIONS', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+
+    server.listen((request) async {
+      if (request.method == 'OPTIONS' && request.uri.path == '/') {
+        request.response.statusCode = HttpStatus.noContent;
+      } else {
+        request.response.statusCode = HttpStatus.notFound;
+      }
+      await request.response.close();
+    });
+
+    final client = WebdavClient.noAuth(
+      url: 'http://${server.address.host}:${server.port}',
+    );
+
+    await expectLater(client.ping(), completes);
+  });
+
   test('PROPFIND tolerates HTTP 200 responses', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() async => server.close(force: true));
@@ -198,5 +218,58 @@ void main() {
       capturedDestination,
       '$authority$absolutePath',
     );
+  });
+
+  test('COPY forwards custom If headers for lock tokens', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+
+    String? capturedIfHeader;
+    server.listen((request) async {
+      if (request.method == 'COPY') {
+        capturedIfHeader = request.headers.value('if');
+        await request.drain();
+        request.response.statusCode = HttpStatus.created;
+      } else {
+        request.response.statusCode = HttpStatus.notFound;
+      }
+      await request.response.close();
+    });
+
+    final client = WebdavClient.noAuth(
+      url: 'http://${server.address.host}:${server.port}',
+    );
+
+    const ifHeader =
+        '<http://example.com/destination> (<opaquelocktoken:1234>)';
+    await client.copy('/source.txt', '/destination.txt', ifHeader: ifHeader);
+
+    expect(capturedIfHeader, equals(ifHeader));
+  });
+
+  test('DELETE forwards custom If headers for lock tokens', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+
+    String? capturedIfHeader;
+    server.listen((request) async {
+      if (request.method == 'DELETE' && request.uri.path == '/locked.txt') {
+        capturedIfHeader = request.headers.value('if');
+        await request.drain();
+        request.response.statusCode = HttpStatus.noContent;
+      } else {
+        request.response.statusCode = HttpStatus.notFound;
+      }
+      await request.response.close();
+    });
+
+    final client = WebdavClient.noAuth(
+      url: 'http://${server.address.host}:${server.port}',
+    );
+
+    const ifHeader = '<http://example.com/locked.txt> (<opaquelocktoken:abcd>)';
+    await client.remove('/locked.txt', ifHeader: ifHeader);
+
+    expect(capturedIfHeader, equals(ifHeader));
   });
 }
