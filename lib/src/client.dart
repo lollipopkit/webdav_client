@@ -78,6 +78,69 @@ class WebdavClient {
     }
   }
 
+  /// Discover DAV capabilities advertised by the server via the `DAV` header.
+  ///
+  /// Returns an ordered list of feature tokens, mirroring SabreDAV's
+  /// [Client::options] helper (see `dav/lib/DAV/Client.php:371`) and
+  /// complying with RFC 4918 §7.7.
+  Future<List<String>> options({
+    String path = '/',
+    bool allowNotFound = false,
+    CancelToken? cancelToken,
+  }) async {
+    final resp = await _client.wdOptions(
+      path,
+      cancelToken: cancelToken,
+      allowNotFound: allowNotFound,
+    );
+    final davHeader = resp.headers.value('dav');
+    if (davHeader == null || davHeader.trim().isEmpty) {
+      return const [];
+    }
+    return davHeader
+        .split(',')
+        .map((feature) => feature.trim())
+        .where((feature) => feature.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  /// Send a raw WebDAV request while reusing the client's authentication
+  /// pipeline and base URL resolution.
+  ///
+  /// Mirrors SabreDAV's [`Client::request`](dav/lib/DAV/Client.php:419) so
+  /// advanced extensions (REPORT, SEARCH, etc.) can be exercised without
+  /// reimplementing Digest handling.
+  Future<Response<T>> request<T>(
+    String method, {
+    String target = '',
+    dynamic data,
+    Map<String, dynamic>? headers,
+    CancelToken? cancelToken,
+    void Function(Options options)? configure,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) {
+    return _client.req<T>(
+      method,
+      target,
+      data: data,
+      optionsHandler: (options) {
+        if (headers != null && headers.isNotEmpty) {
+          options.headers ??= <String, dynamic>{};
+          headers.forEach((key, value) {
+            options.headers?[key] = value;
+          });
+        }
+        if (configure != null) {
+          configure(options);
+        }
+      },
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+      cancelToken: cancelToken,
+    );
+  }
+
   /// Get the quota of the server
   ///
   /// - [cancelToken] for cancelling the request
@@ -312,10 +375,46 @@ class WebdavClient {
       cancelToken: cancelToken,
       ifHeader: ifHeader,
     );
-    if (resp.statusCode == 200 ||
-        resp.statusCode == 204 ||
-        resp.statusCode == 404) {
+    final status = resp.statusCode ?? -1;
+    if (status == 200 || status == 202 || status == 204 || status == 404) {
       return;
+    }
+    if (status == 207) {
+      final body = resp.data;
+      if (body is! String || body.isEmpty) {
+        throw WebdavException(
+          message:
+              'DELETE returned 207 Multi-Status without an XML response body to inspect',
+          statusCode: status,
+          statusMessage: resp.statusMessage,
+          response: resp,
+        );
+      }
+      try {
+        final failures = parseMultiStatusFailureMessages(body);
+        if (failures.isEmpty) {
+          // RFC 4918 §8.7 requires Multi-Status to describe at least one member.
+          throw WebdavException(
+            message: 'DELETE reported Multi-Status but no member failures',
+            statusCode: status,
+            statusMessage: resp.statusMessage,
+            response: resp,
+          );
+        }
+        throw WebdavException(
+          message: failures.join('; '),
+          statusCode: status,
+          statusMessage: resp.statusMessage,
+          response: resp,
+        );
+      } on XmlException catch (error) {
+        throw WebdavException(
+          message: 'Unable to parse DELETE Multi-Status response: $error',
+          statusCode: status,
+          statusMessage: resp.statusMessage,
+          response: resp,
+        );
+      }
     }
     throw _newResponseError(resp);
   }
@@ -818,7 +917,7 @@ List<String> parsePropPatchFailureMessages(String xmlString) {
   return failures;
 }
 
-List<String> parseCopyMoveFailureMessages(String xmlString) {
+List<String> parseMultiStatusFailureMessages(String xmlString) {
   final document = XmlDocument.parse(xmlString);
   final failures = <String>[];
 

@@ -246,18 +246,19 @@ class _WdDio with DioMixin {
   }
 
   /// DELETE
-  Future<Response<void>> wdDelete(
+  Future<Response<String>> wdDelete(
     String path, {
     CancelToken? cancelToken,
     String? ifHeader,
   }) {
-    return req(
+    return req<String>(
       'DELETE',
       path,
       optionsHandler: (options) {
         if (ifHeader != null && ifHeader.isNotEmpty) {
           options.headers?['If'] = ifHeader;
         }
+        options.responseType = ResponseType.plain;
       },
       cancelToken: cancelToken,
     );
@@ -305,7 +306,7 @@ class _WdDio with DioMixin {
         );
       }
       try {
-        final failures = parseCopyMoveFailureMessages(body);
+        final failures = parseMultiStatusFailureMessages(body);
         if (failures.isNotEmpty) {
           throw WebdavException(
             message: failures.join('; '),

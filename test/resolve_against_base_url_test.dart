@@ -64,5 +64,18 @@ void main() {
         ),
       );
     });
+
+    test('normalizes dot segments while preserving base prefix', () {
+      final resolved = resolveAgainstBaseUrl(
+        base,
+        '../Archive/../docs/report.txt',
+      );
+      expect(
+        resolved,
+        equals(
+          'https://example.com/remote.php/dav/files/docs/report.txt',
+        ),
+      );
+    });
   });
 }

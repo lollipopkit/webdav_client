@@ -89,12 +89,14 @@ String resolveAgainstBaseUrl(String baseUrl, String target) {
       ..addAll(targetSegments);
   }
 
+  final normalizedSegments = _removeDotSegments(combinedSegments);
+
   final pathBuffer = StringBuffer();
-  if (combinedSegments.isEmpty) {
+  if (normalizedSegments.isEmpty) {
     pathBuffer.write('/');
   } else {
     pathBuffer.write('/');
-    pathBuffer.writeAll(combinedSegments, '/');
+    pathBuffer.writeAll(normalizedSegments, '/');
     if (trimmed.endsWith('/')) {
       pathBuffer.write('/');
     }
@@ -133,6 +135,23 @@ List<String> _withoutTrailingEmpty(List<String> segments) {
     return List<String>.from(segments);
   }
   return segments.sublist(0, end);
+}
+
+List<String> _removeDotSegments(List<String> segments) {
+  final normalized = <String>[];
+  for (final segment in segments) {
+    if (segment.isEmpty || segment == '.') {
+      continue;
+    }
+    if (segment == '..') {
+      if (normalized.isNotEmpty) {
+        normalized.removeLast();
+      }
+      continue;
+    }
+    normalized.add(segment);
+  }
+  return normalized;
 }
 
 /// HASH
