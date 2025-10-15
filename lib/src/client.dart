@@ -277,6 +277,71 @@ class WebdavClient {
     return WebdavFile.parseFiles(path, str, skipSelf: false).firstOrNull;
   }
 
+  /// Perform a PROPFIND request and return raw Multi-Status propstat data.
+  ///
+  /// Mirrors SabreDAV's [`Client::propFindUnfiltered`](dav/lib/DAV/Client.php:230)
+  /// so callers can inspect per-property HTTP statuses as required by
+  /// RFC 4918 §9.1.2.
+  Future<Map<String, Map<int, Map<String, XmlElement>>>> propFindRaw(
+    String path, {
+    PropsDepth depth = PropsDepth.zero,
+    List<String> properties = PropfindType.defaultFindProperties,
+    PropfindType findType = PropfindType.prop,
+    Map<String, String> namespaces = const <String, String>{},
+    CancelToken? cancelToken,
+  }) async {
+    final xmlStr = findType.buildXmlStr(
+      properties,
+      namespaceMap: namespaces,
+    );
+
+    final resp = await _client.wdPropfind(
+      path,
+      depth,
+      xmlStr,
+      cancelToken: cancelToken,
+    );
+
+    final str = resp.data;
+    if (str == null) {
+      throw WebdavException(
+        message: 'No data returned',
+        statusCode: resp.statusCode,
+      );
+    }
+
+    final responses = parseMultiStatus(str);
+    final result = <String, Map<int, Map<String, XmlElement>>>{};
+
+    for (final response in responses) {
+      final key = response.href.isNotEmpty ? response.href : path;
+      final statusMap = result.putIfAbsent(key, () => <int, Map<String, XmlElement>>{});
+
+      for (final propstat in response.propstats) {
+        final statusCode = propstat.statusCode;
+        if (statusCode == null) {
+          continue;
+        }
+        statusMap.update(
+          statusCode,
+          (existing) {
+            final merged = Map<String, XmlElement>.from(existing);
+            merged.addAll(propstat.properties);
+            return merged;
+          },
+          ifAbsent: () => propstat.properties,
+        );
+      }
+
+      final overallStatus = response.statusCode;
+      if (overallStatus != null && !statusMap.containsKey(overallStatus)) {
+        statusMap[overallStatus] = const <String, XmlElement>{};
+      }
+    }
+
+    return result;
+  }
+
   /// Create a folder
   ///
   /// - [path] of the folder
@@ -894,11 +959,23 @@ class MultiStatusResponse {
   /// Detailed propstat blocks grouped by status code.
   final List<MultiStatusPropstat> propstats;
 
+  /// Raw `<d:error>` element reported for the response, if any.
+  final XmlElement? error;
+
+  /// Optional response description (DAV:responsedescription) for human diagnostics.
+  final String? responseDescription;
+
+  /// Optional redirect location for the resource, decoded when available.
+  final String? locationHref;
+
   const MultiStatusResponse({
     required this.href,
     required this.propstats,
     this.statusCode,
     this.rawStatus,
+    this.error,
+    this.responseDescription,
+    this.locationHref,
   });
 }
 
@@ -930,8 +1007,7 @@ List<MultiStatusResponse> parseMultiStatus(String xmlString) {
 
   for (final responseElement in findAllElements(document, 'response')) {
     final href = getElementText(responseElement, 'href');
-    final decodedHref =
-        href != null && href.isNotEmpty ? Uri.decodeFull(href) : '';
+    final decodedHref = href != null && href.isNotEmpty ? _decodeHref(href) : '';
 
     final overallStatusElement = responseElement.childElements.firstWhereOrNull(
       (element) =>
@@ -941,6 +1017,35 @@ List<MultiStatusResponse> parseMultiStatus(String xmlString) {
     final overallStatusText = overallStatusElement?.innerText;
     final overallStatusCode =
         overallStatusText != null ? _parseStatusCode(overallStatusText) : null;
+
+    final errorElement = responseElement.childElements.firstWhereOrNull(
+      (element) => element.name.local == 'error',
+    );
+    final responseDescriptionElement = responseElement.childElements.firstWhereOrNull(
+      (element) => element.name.local == 'responsedescription',
+    );
+    final locationElement = responseElement.childElements.firstWhereOrNull(
+      (element) => element.name.local == 'location',
+    );
+
+    String? responseDescription;
+    if (responseDescriptionElement != null) {
+      final text = responseDescriptionElement.innerText.trim();
+      if (text.isNotEmpty) {
+        responseDescription = text;
+      }
+    }
+
+    String? locationHref;
+    if (locationElement != null) {
+      final hrefElement = findElements(locationElement, 'href').firstOrNull;
+      if (hrefElement != null) {
+        final hrefText = hrefElement.innerText;
+        if (hrefText.isNotEmpty) {
+          locationHref = _decodeHref(hrefText);
+        }
+      }
+    }
 
     final propstats = <MultiStatusPropstat>[];
     for (final propstatElement in findElements(responseElement, 'propstat')) {
@@ -976,11 +1081,22 @@ List<MultiStatusResponse> parseMultiStatus(String xmlString) {
         propstats: propstats,
         statusCode: overallStatusCode,
         rawStatus: overallStatusText,
+        error: errorElement,
+        responseDescription: responseDescription,
+        locationHref: locationHref,
       ),
     );
   }
 
   return responses;
+}
+
+String _decodeHref(String value) {
+  try {
+    return Uri.decodeFull(value);
+  } on FormatException {
+    return value;
+  }
 }
 
 List<String> parsePropPatchFailureMessages(String xmlString) {

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:test/test.dart';
 import 'package:webdav_client_plus/webdav_client_plus.dart';
+import 'package:xml/xml.dart';
 
 void main() {
   test('ping accepts any successful 2xx response from OPTIONS', () async {
@@ -227,6 +228,63 @@ void main() {
         ),
       ),
     );
+  });
+
+  test('propFindRaw returns per-status property maps', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+
+    server.listen((request) async {
+      if (request.method == 'PROPFIND' && request.uri.path == '/raw') {
+        await request.drain();
+        const body = '''
+<?xml version="1.0" encoding="utf-8"?>
+<d:multistatus xmlns:d="DAV:" xmlns:custom="http://example.com/custom">
+  <d:response>
+    <d:href>/raw</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:displayname>Raw</d:displayname>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+    <d:propstat>
+      <d:prop>
+        <custom:prop/>
+      </d:prop>
+      <d:status>HTTP/1.1 404 Not Found</d:status>
+    </d:propstat>
+  </d:response>
+</d:multistatus>
+''';
+        request.response
+          ..statusCode = HttpStatus.multiStatus
+          ..headers.contentType =
+              ContentType('application', 'xml', charset: 'utf-8')
+          ..write(body);
+      } else {
+        request.response.statusCode = HttpStatus.notFound;
+      }
+      await request.response.close();
+    });
+
+    final client = WebdavClient.noAuth(
+      url: 'http://${server.address.host}:${server.port}',
+    );
+
+    final raw = await client.propFindRaw(
+      '/raw',
+      properties: [
+        '{DAV:}displayname',
+        '{http://example.com/custom}prop',
+      ],
+      depth: PropsDepth.zero,
+    );
+
+    final self = raw['/raw'];
+    expect(self, isNotNull);
+    expect(self![200]!['{DAV:}displayname']?.innerText, 'Raw');
+    expect(self[404]!['{http://example.com/custom}prop'], isNotNull);
   });
 
   test('DELETE surfaces member failures from Multi-Status responses', () async {

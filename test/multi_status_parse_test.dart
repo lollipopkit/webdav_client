@@ -61,5 +61,31 @@ void main() {
       expect(response.rawStatus, contains('404'));
       expect(response.propstats, isEmpty);
     });
+
+    test('captures DAV error metadata and location hints', () {
+      const xml = '''
+<?xml version="1.0" encoding="utf-8"?>
+<d:multistatus xmlns:d="DAV:">
+  <d:response>
+    <d:href>/locked.txt</d:href>
+    <d:status>HTTP/1.1 423 Locked</d:status>
+    <d:error>
+      <d:lock-token-submitted/>
+    </d:error>
+    <d:responsedescription>The resource is currently locked.</d:responsedescription>
+    <d:location>
+      <d:href>/locks/info</d:href>
+    </d:location>
+  </d:response>
+</d:multistatus>
+''';
+
+      final responses = parseMultiStatus(xml);
+      final response = responses.single;
+      expect(response.error, isNotNull);
+      expect(response.error!.findElements('lock-token-submitted', namespace: '*'), isNotEmpty);
+      expect(response.responseDescription, 'The resource is currently locked.');
+      expect(response.locationHref, '/locks/info');
+    });
   });
 }
