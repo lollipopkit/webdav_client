@@ -31,9 +31,8 @@ class _WdDio with DioMixin {
       optionsHandler(options);
     }
 
-    final rawTarget = path.startsWith(_httpPrefixReg)
-        ? path
-        : joinPath(client.url, path);
+    final rawTarget =
+        path.startsWith(_httpPrefixReg) ? path : joinPath(client.url, path);
     final uri = Uri.parse(rawTarget);
 
     // authorization
@@ -253,8 +252,11 @@ class _WdDio with DioMixin {
       method,
       oldPath,
       optionsHandler: (options) {
-        options.headers?['destination'] =
-            Uri.encodeFull(joinPath(client.url, newPath));
+        final destinationHeader = resolveAgainstBaseUrl(
+          client.url,
+          newPath,
+        );
+        options.headers?['destination'] = destinationHeader;
         options.headers?['overwrite'] = overwrite == true ? 'T' : 'F';
         options.headers?['depth'] = depth.value;
         options.responseType = ResponseType.plain;
@@ -267,8 +269,7 @@ class _WdDio with DioMixin {
       final body = resp.data;
       if (body is! String) {
         throw WebdavException(
-          message:
-              'Multi-Status response did not include text body to inspect',
+          message: 'Multi-Status response did not include text body to inspect',
           statusCode: status,
           statusMessage: resp.statusMessage,
           response: resp,

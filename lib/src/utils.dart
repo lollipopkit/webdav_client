@@ -52,6 +52,26 @@ String joinPath(String path0, String path1) {
           : '$path0/$path1';
 }
 
+/// Resolve [target] against [baseUrl] producing an absolute HTTP(S) URL.
+///
+/// - If [target] is already an absolute URL, it is returned as-is after
+///   normalization.
+/// - Otherwise, [target] (including leading slash paths) is treated as
+///   relative to [baseUrl].
+String resolveAgainstBaseUrl(String baseUrl, String target) {
+  final trimmed = target.trim();
+  if (trimmed.isEmpty) {
+    return Uri.parse(baseUrl).toString();
+  }
+
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return Uri.parse(trimmed).toString();
+  }
+
+  final joined = joinPath(baseUrl, trimmed);
+  return Uri.parse(joined).toString();
+}
+
 /// HASH
 
 String md5Hash(String data) {

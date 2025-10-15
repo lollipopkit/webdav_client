@@ -9,8 +9,7 @@ void main() {
     addTearDown(() async => server.close(force: true));
 
     server.listen((request) async {
-      if (request.method == 'PROPFIND' &&
-          request.uri.path == '/propfind-200') {
+      if (request.method == 'PROPFIND' && request.uri.path == '/propfind-200') {
         await request.drain();
         const body = '''
 <?xml version="1.0" encoding="utf-8"?>
@@ -139,6 +138,65 @@ void main() {
           contains('423'),
         ),
       ),
+    );
+  });
+
+  test('COPY reuses caller-provided absolute Destination URIs verbatim',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+
+    String? capturedDestination;
+    server.listen((request) async {
+      if (request.method == 'COPY') {
+        capturedDestination = request.headers.value('destination');
+        await request.drain();
+        request.response.statusCode = HttpStatus.created;
+      } else {
+        request.response.statusCode = HttpStatus.notFound;
+      }
+      await request.response.close();
+    });
+
+    final authority = 'http://${server.address.host}:${server.port}';
+    final client = WebdavClient.noAuth(
+      url: '$authority/remote.php/dav/files/alice',
+    );
+
+    final absoluteDest = '$authority/external/library/asset.txt';
+    await client.copy('/source.txt', absoluteDest);
+
+    expect(capturedDestination, absoluteDest);
+  });
+
+  test('COPY resolves absolute-path Destinations against the base authority',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+
+    String? capturedDestination;
+    server.listen((request) async {
+      if (request.method == 'COPY') {
+        capturedDestination = request.headers.value('destination');
+        await request.drain();
+        request.response.statusCode = HttpStatus.created;
+      } else {
+        request.response.statusCode = HttpStatus.notFound;
+      }
+      await request.response.close();
+    });
+
+    final authority = 'http://${server.address.host}:${server.port}';
+    final client = WebdavClient.noAuth(
+      url: '$authority/remote.php/dav/files/alice',
+    );
+
+    const absolutePath = '/remote.php/dav/files/alice/target.txt';
+    await client.copy('/source.txt', absolutePath);
+
+    expect(
+      capturedDestination,
+      '$authority$absolutePath',
     );
   });
 }

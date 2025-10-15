@@ -882,7 +882,7 @@ extension _Utils on WebdavClient {
     if (lockToken == null && etag == null) return '';
 
     final conditions = <String>[];
-    final resourceTag = Uri.encodeFull(joinPath(url, path));
+    final resourceTag = resolveAgainstBaseUrl(url, path);
 
     // 确保资源标记是完整的 URL
     final taggedList = StringBuffer('<$resourceTag>');
