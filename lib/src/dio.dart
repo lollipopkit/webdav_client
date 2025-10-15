@@ -173,7 +173,6 @@ class _WdDio with DioMixin {
     final resp = await req(
       'OPTIONS',
       path,
-      optionsHandler: (options) => options.headers?['depth'] = '0',
       cancelToken: cancelToken,
     );
 
@@ -352,9 +351,6 @@ class _WdDio with DioMixin {
     void Function(int count, int total)? onProgress,
     CancelToken? cancelToken,
   }) async {
-    // RFC 4918 §10.1 & RFC 7231 allow a range of 2xx responses to OPTIONS.
-    await wdOptions(path, cancelToken: cancelToken);
-
     final resp = await req(
       'GET',
       path,
@@ -398,9 +394,6 @@ class _WdDio with DioMixin {
     void Function(int count, int total)? onProgress,
     CancelToken? cancelToken,
   }) async {
-    // Pre-flight respecting RFC-compliant OPTIONS responses.
-    await wdOptions(path, cancelToken: cancelToken);
-
     final Response<ResponseBody> resp;
 
     // Reference Dio download
@@ -576,12 +569,6 @@ class _WdDio with DioMixin {
     void Function(int count, int total)? onProgress,
     CancelToken? cancelToken,
   }) async {
-    await wdOptions(
-      path,
-      cancelToken: cancelToken,
-      allowNotFound: true,
-    );
-
     // mkdir
     await _createParent(path, cancelToken: cancelToken);
 
@@ -615,12 +602,6 @@ class _WdDio with DioMixin {
     void Function(int count, int total)? onProgress,
     CancelToken? cancelToken,
   }) async {
-    await wdOptions(
-      path,
-      cancelToken: cancelToken,
-      allowNotFound: true,
-    );
-
     // mkdir
     await _createParent(path, cancelToken: cancelToken);
 
