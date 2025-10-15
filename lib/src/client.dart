@@ -520,7 +520,7 @@ class WebdavClient {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:lockinfo', nest: () {
-      xmlBuilder.namespace('d', 'DAV:');
+      xmlBuilder.namespace('DAV:', 'd');
       xmlBuilder.element('d:lockscope', nest: () {
         xmlBuilder.element(exclusive ? 'd:exclusive' : 'd:shared');
       });

@@ -31,14 +31,17 @@ class _WdDio with DioMixin {
       optionsHandler(options);
     }
 
+    final rawTarget = path.startsWith(_httpPrefixReg)
+        ? path
+        : joinPath(client.url, path);
+    final uri = Uri.parse(rawTarget);
+
     // authorization
-    final authStr = client.auth.authorize(method, path);
+    final requestTarget = _requestTarget(uri);
+    final authStr = client.auth.authorize(method, requestTarget);
     if (authStr != null) {
       options.headers?['authorization'] = authStr;
     }
-
-    final uri = Uri.parse(
-        path.startsWith(_httpPrefixReg) ? path : joinPath(client.url, path));
     final resp = await requestUri<T>(
       uri,
       options: options,
@@ -152,6 +155,14 @@ class _WdDio with DioMixin {
     }
 
     return resp;
+  }
+
+  String _requestTarget(Uri uri) {
+    final path = uri.path.isEmpty ? '/' : uri.path;
+    if (uri.hasQuery) {
+      return '$path?${uri.query}';
+    }
+    return path;
   }
 
   // OPTIONS
@@ -286,8 +297,14 @@ class _WdDio with DioMixin {
       return;
     } else if (status == 409) {
       await _createParent(newPath, cancelToken: cancelToken);
-      return wdCopyMove(oldPath, newPath, isCopy, overwrite,
-          cancelToken: cancelToken);
+      return wdCopyMove(
+        oldPath,
+        newPath,
+        isCopy,
+        overwrite,
+        cancelToken: cancelToken,
+        depth: depth,
+      );
     } else {
       throw _newResponseError(resp);
     }

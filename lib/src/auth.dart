@@ -122,7 +122,7 @@ final class DigestAuth extends Auth {
 
   @override
   String authorize(String method, String path) {
-    digestParts.uri = Uri.encodeFull(path);
+    digestParts.uri = path;
     digestParts.method = method;
     return _getDigestAuthorization();
   }
