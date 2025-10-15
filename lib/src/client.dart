@@ -735,12 +735,6 @@ List<String> parsePropPatchFailureMessages(String xmlString) {
   final document = XmlDocument.parse(xmlString);
   final failures = <String>[];
 
-  int? parseStatusCode(String statusText) {
-    final match = RegExp(r'\b(\d{3})\b').firstMatch(statusText);
-    if (match == null) return null;
-    return int.tryParse(match.group(1)!);
-  }
-
   final responseElements = findAllElements(document, 'response');
   for (final response in responseElements) {
     final propstatElements = findElements(response, 'propstat');
@@ -751,7 +745,7 @@ List<String> parsePropPatchFailureMessages(String xmlString) {
       }
 
       final statusText = statusElement.innerText;
-      final statusCode = parseStatusCode(statusText);
+      final statusCode = _parseStatusCode(statusText);
       if (statusCode != null && statusCode < 400) {
         continue;
       }
@@ -768,6 +762,52 @@ List<String> parsePropPatchFailureMessages(String xmlString) {
       failures.add(
         'Failed to update properties for $href: $statusText. Failed props: $failedProps',
       );
+    }
+  }
+
+  return failures;
+}
+
+List<String> parseCopyMoveFailureMessages(String xmlString) {
+  final document = XmlDocument.parse(xmlString);
+  final failures = <String>[];
+
+  final responseElements = findAllElements(document, 'response');
+  for (final response in responseElements) {
+    final href = getElementText(response, 'href') ?? '';
+
+    final statusElements = response.childElements.where((element) {
+      if (element.name.local != 'status') return false;
+      final parent = element.parentElement;
+      return parent == null || parent.name.local != 'propstat';
+    });
+
+    for (final status in statusElements) {
+      final statusText = status.innerText;
+      final statusCode = _parseStatusCode(statusText);
+      if (statusCode != null && statusCode >= 400) {
+        failures.add('Failed to process $href: $statusText');
+      }
+    }
+
+    final propstatElements = findElements(response, 'propstat');
+    for (final propstat in propstatElements) {
+      final statusElement = findElements(propstat, 'status').firstOrNull;
+      if (statusElement == null) continue;
+      final statusCode = _parseStatusCode(statusElement.innerText);
+      if (statusCode != null && statusCode >= 400) {
+        final propElement = findElements(propstat, 'prop').firstOrNull;
+        final props = <String>[];
+        if (propElement != null) {
+          for (final prop in propElement.childElements) {
+            props.add(prop.name.qualified);
+          }
+        }
+        final propsSuffix = props.isEmpty ? '' : '. Props: $props';
+        failures.add(
+          'Failed to process $href: ${statusElement.innerText}$propsSuffix',
+        );
+      }
     }
   }
 
@@ -905,8 +945,18 @@ extension _Utils on WebdavClient {
   }
 
   void _ensurePropPatchSuccess(Response<String> resp) {
+    final status = resp.statusCode ?? 0;
+    if (status < 200 || status >= 300) {
+      throw _newResponseError(resp);
+    }
+
+    if (status != 207) {
+      // RFC 4918 §9.2 allows other 2xx statuses for high-level responses.
+      return;
+    }
+
     final xmlString = resp.data;
-    if (xmlString == null) {
+    if (xmlString == null || xmlString.isEmpty) {
       throw WebdavException(
         message:
             'PROPPATCH response did not include a multi-status body to inspect',
@@ -935,4 +985,10 @@ extension _Utils on WebdavClient {
       );
     }
   }
+}
+
+int? _parseStatusCode(String statusText) {
+  final match = RegExp(r'\b(\d{3})\b').firstMatch(statusText);
+  if (match == null) return null;
+  return int.tryParse(match.group(1)!);
 }

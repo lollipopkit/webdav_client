@@ -210,7 +210,8 @@ class _WdDio with DioMixin {
       cancelToken: cancelToken,
     );
 
-    if (resp.statusCode != 207) {
+    final status = resp.statusCode ?? 0;
+    if (status < 200 || status >= 300) {
       throw _newResponseError(resp);
     }
 
@@ -245,27 +246,43 @@ class _WdDio with DioMixin {
             Uri.encodeFull(joinPath(client.url, newPath));
         options.headers?['overwrite'] = overwrite == true ? 'T' : 'F';
         options.headers?['depth'] = depth.value;
+        options.responseType = ResponseType.plain;
       },
       cancelToken: cancelToken,
     );
 
-    final status = resp.statusCode;
-    if (status == 201 || status == 204) {
-      return;
-    } else if (status == 207) {
-      // Handle Multi-Status response (207)
-      // Parse the XML response to determine if any critical operations failed
-      final responseData = resp.data.toString();
-      if (responseData.contains('<status>HTTP/1.1 5')) {
-        // If response contains any 5xx errors, consider it a failure
+    final status = resp.statusCode ?? -1;
+    if (status == 207) {
+      final body = resp.data;
+      if (body is! String) {
         throw WebdavException(
-          message: 'Multi-Status operation partially failed: $responseData',
-          statusCode: resp.statusCode,
+          message:
+              'Multi-Status response did not include text body to inspect',
+          statusCode: status,
           statusMessage: resp.statusMessage,
           response: resp,
         );
       }
-      // Otherwise, operation was successful enough to proceed
+      try {
+        final failures = parseCopyMoveFailureMessages(body);
+        if (failures.isNotEmpty) {
+          throw WebdavException(
+            message: failures.join('; '),
+            statusCode: status,
+            statusMessage: resp.statusMessage,
+            response: resp,
+          );
+        }
+      } on XmlException catch (error) {
+        throw WebdavException(
+          message: 'Unable to parse Multi-Status response: $error',
+          statusCode: status,
+          statusMessage: resp.statusMessage,
+          response: resp,
+        );
+      }
+      return;
+    } else if (status >= 200 && status < 300) {
       return;
     } else if (status == 409) {
       await _createParent(newPath, cancelToken: cancelToken);
@@ -643,7 +660,8 @@ class _WdDio with DioMixin {
       cancelToken: cancelToken,
     );
 
-    if (resp.statusCode != 207) {
+    final status = resp.statusCode ?? 0;
+    if (status < 200 || status >= 300) {
       throw _newResponseError(resp);
     }
 
