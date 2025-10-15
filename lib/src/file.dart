@@ -155,13 +155,14 @@ class WebdavFile {
       }
 
       // Custom property found
-      final value = element.innerText;
-      if (value.isNotEmpty) {
-        final propName = namespace != null && namespace != 'DAV:'
-            ? '$namespace:$localName'
-            : localName;
-        customProps[propName] = value;
-      }
+      final propName = namespace != null && namespace != 'DAV:'
+          ? '$namespace:$localName'
+          : localName;
+
+      final hasComplexContent =
+          element.childElements.isNotEmpty || element.attributes.isNotEmpty;
+      final value = hasComplexContent ? element.innerXml : element.innerText;
+      customProps[propName] = value;
     }
 
     return WebdavFile(

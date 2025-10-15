@@ -15,6 +15,20 @@ void main() {
     expect(first.created, null);
     expect(first.modified, DateTime(2025, 3, 16, 1, 37, 28));
   });
+
+  test('custom properties preserve nested and empty values', () {
+    final files = WebdavFile.parseFiles('/', _customPropFindRaw);
+    final entry = files.single;
+
+    expect(
+      entry.customProps['http://example.com/custom:meta'],
+      contains('<custom:child>value</custom:child>'),
+    );
+    expect(
+      entry.customProps['http://example.com/custom:empty'],
+      isEmpty,
+    );
+  });
 }
 
 const _propFindRaw = '''
@@ -33,4 +47,22 @@ const _propFindRaw = '''
 </D:propstat>
 </D:response>
 </D:multistatus>
+''';
+
+const _customPropFindRaw = '''
+<?xml version="1.0" encoding="utf-8"?>
+<d:multistatus xmlns:d="DAV:" xmlns:custom="http://example.com/custom">
+  <d:response>
+    <d:href>/data/file.txt</d:href>
+    <d:propstat>
+      <d:prop>
+        <custom:meta>
+          <custom:child>value</custom:child>
+        </custom:meta>
+        <custom:empty/>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+</d:multistatus>
 ''';
