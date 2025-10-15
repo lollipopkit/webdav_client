@@ -880,37 +880,126 @@ class WebdavClient {
   }
 }
 
-List<String> parsePropPatchFailureMessages(String xmlString) {
+/// Result of parsing a WebDAV Multi-Status response.
+class MultiStatusResponse {
+  /// The decoded href of the resource the response applies to.
+  final String href;
+
+  /// Top-level HTTP status code (outside of propstat blocks), if present.
+  final int? statusCode;
+
+  /// Raw status text as transmitted by the server for the top-level status.
+  final String? rawStatus;
+
+  /// Detailed propstat blocks grouped by status code.
+  final List<MultiStatusPropstat> propstats;
+
+  const MultiStatusResponse({
+    required this.href,
+    required this.propstats,
+    this.statusCode,
+    this.rawStatus,
+  });
+}
+
+/// A single propstat block within a Multi-Status response.
+class MultiStatusPropstat {
+  /// HTTP status code parsed from the propstat status line, if available.
+  final int? statusCode;
+
+  /// Raw status text as transmitted by the server.
+  final String? rawStatus;
+
+  /// Properties reported for this status, keyed by Clark notation
+  /// (e.g. `{DAV:}getetag`). Values expose the original XML element so callers
+  /// can inspect complex content if needed.
+  final Map<String, XmlElement> properties;
+
+  const MultiStatusPropstat({
+    required this.properties,
+    this.statusCode,
+    this.rawStatus,
+  });
+}
+
+/// Parse an RFC 4918 Multi-Status XML body into structured responses, closely
+/// following the behaviour of SabreDAV's `Client::parseMultiStatus`.
+List<MultiStatusResponse> parseMultiStatus(String xmlString) {
   final document = XmlDocument.parse(xmlString);
-  final failures = <String>[];
+  final responses = <MultiStatusResponse>[];
 
-  final responseElements = findAllElements(document, 'response');
-  for (final response in responseElements) {
-    final propstatElements = findElements(response, 'propstat');
-    for (final propstat in propstatElements) {
-      final statusElement = findElements(propstat, 'status').firstOrNull;
-      if (statusElement == null) {
-        continue;
-      }
+  for (final responseElement in findAllElements(document, 'response')) {
+    final href = getElementText(responseElement, 'href');
+    final decodedHref =
+        href != null && href.isNotEmpty ? Uri.decodeFull(href) : '';
 
-      final statusText = statusElement.innerText;
-      final statusCode = _parseStatusCode(statusText);
-      if (statusCode != null && statusCode < 400) {
-        continue;
-      }
+    final overallStatusElement = responseElement.childElements.firstWhereOrNull(
+      (element) =>
+          element.name.local == 'status' &&
+          element.parentElement == responseElement,
+    );
+    final overallStatusText = overallStatusElement?.innerText;
+    final overallStatusCode =
+        overallStatusText != null ? _parseStatusCode(overallStatusText) : null;
 
-      final href = getElementText(response, 'href') ?? '';
-      final failedProps = <String>[];
-      final propElement = findElements(propstat, 'prop').firstOrNull;
+    final propstats = <MultiStatusPropstat>[];
+    for (final propstatElement in findElements(responseElement, 'propstat')) {
+      final statusElement = findElements(propstatElement, 'status').firstOrNull;
+      final statusText = statusElement?.innerText;
+      final statusCode =
+          statusText != null ? _parseStatusCode(statusText) : null;
+
+      final propElement = findElements(propstatElement, 'prop').firstOrNull;
+      final properties = <String, XmlElement>{};
       if (propElement != null) {
         for (final prop in propElement.childElements) {
-          failedProps.add(prop.name.qualified);
+          final namespaceUri = prop.name.namespaceUri ?? '';
+          final key = namespaceUri.isEmpty
+              ? prop.name.local
+              : '{$namespaceUri}${prop.name.local}';
+          properties[key] = prop;
         }
       }
 
-      failures.add(
-        'Failed to update properties for $href: $statusText. Failed props: $failedProps',
+      propstats.add(
+        MultiStatusPropstat(
+          properties: properties,
+          statusCode: statusCode,
+          rawStatus: statusText,
+        ),
       );
+    }
+
+    responses.add(
+      MultiStatusResponse(
+        href: decodedHref,
+        propstats: propstats,
+        statusCode: overallStatusCode,
+        rawStatus: overallStatusText,
+      ),
+    );
+  }
+
+  return responses;
+}
+
+List<String> parsePropPatchFailureMessages(String xmlString) {
+  final responses = parseMultiStatus(xmlString);
+  final failures = <String>[];
+
+  for (final response in responses) {
+    for (final propstat in response.propstats) {
+      final status = propstat.statusCode;
+      if (status != null && status >= 400) {
+        final propNames = propstat.properties.values
+            .map(_formatPropertyName)
+            .toList();
+        final statusText = propstat.rawStatus ?? 'HTTP status $status';
+        failures.add(
+          'Failed to update properties for ${response.href}: '
+          '$statusText. Failed props: $propNames',
+        );
+      }
     }
   }
 
@@ -918,49 +1007,47 @@ List<String> parsePropPatchFailureMessages(String xmlString) {
 }
 
 List<String> parseMultiStatusFailureMessages(String xmlString) {
-  final document = XmlDocument.parse(xmlString);
+  final responses = parseMultiStatus(xmlString);
   final failures = <String>[];
 
-  final responseElements = findAllElements(document, 'response');
-  for (final response in responseElements) {
-    final href = getElementText(response, 'href') ?? '';
-
-    final statusElements = response.childElements.where((element) {
-      if (element.name.local != 'status') return false;
-      final parent = element.parentElement;
-      return parent == null || parent.name.local != 'propstat';
-    });
-
-    for (final status in statusElements) {
-      final statusText = status.innerText;
-      final statusCode = _parseStatusCode(statusText);
-      if (statusCode != null && statusCode >= 400) {
-        failures.add('Failed to process $href: $statusText');
-      }
+  for (final response in responses) {
+    final status = response.statusCode;
+    if (status != null && status >= 400) {
+      final statusText = response.rawStatus ?? 'HTTP status $status';
+      failures.add('Failed to process ${response.href}: $statusText');
     }
 
-    final propstatElements = findElements(response, 'propstat');
-    for (final propstat in propstatElements) {
-      final statusElement = findElements(propstat, 'status').firstOrNull;
-      if (statusElement == null) continue;
-      final statusCode = _parseStatusCode(statusElement.innerText);
-      if (statusCode != null && statusCode >= 400) {
-        final propElement = findElements(propstat, 'prop').firstOrNull;
-        final props = <String>[];
-        if (propElement != null) {
-          for (final prop in propElement.childElements) {
-            props.add(prop.name.qualified);
-          }
-        }
-        final propsSuffix = props.isEmpty ? '' : '. Props: $props';
-        failures.add(
-          'Failed to process $href: ${statusElement.innerText}$propsSuffix',
-        );
+    for (final propstat in response.propstats) {
+      final statusCode = propstat.statusCode;
+      if (statusCode == null || statusCode < 400) {
+        continue;
       }
+      final statusText = propstat.rawStatus ?? 'HTTP status $statusCode';
+      final props = propstat.properties.values
+          .map(_formatPropertyName)
+          .toList();
+      final propsSuffix = props.isEmpty ? '' : '. Props: $props';
+      failures.add(
+        'Failed to process ${response.href}: $statusText$propsSuffix',
+      );
     }
   }
 
   return failures;
+}
+
+String _formatPropertyName(XmlElement element) {
+  final prefix = element.name.prefix;
+  if (prefix != null && prefix.isNotEmpty) {
+    return '$prefix:${element.name.local}';
+  }
+
+  final namespace = element.name.namespaceUri;
+  if (namespace != null && namespace.isNotEmpty) {
+    return '{$namespace}${element.name.local}';
+  }
+
+  return element.name.local;
 }
 
 extension _Utils on WebdavClient {
