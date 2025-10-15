@@ -4,7 +4,7 @@ import 'package:webdav_client_plus/src/client.dart';
 void main() {
   group('parsePropPatchFailureMessages', () {
     test('returns empty list when all propstat entries succeed', () {
-      final xml = '''
+      const xml = '''
 <?xml version="1.0" encoding="utf-8"?>
 <d:multistatus xmlns:d="DAV:">
   <d:response>
@@ -24,7 +24,7 @@ void main() {
     });
 
     test('captures failing propstat entries for diagnostics', () {
-      final xml = '''
+      const xml = '''
 <?xml version="1.0" encoding="utf-8"?>
 <d:multistatus xmlns:d="DAV:">
   <d:response>

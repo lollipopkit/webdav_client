@@ -68,8 +68,71 @@ String resolveAgainstBaseUrl(String baseUrl, String target) {
     return Uri.parse(trimmed).toString();
   }
 
-  final joined = joinPath(baseUrl, trimmed);
-  return Uri.parse(joined).toString();
+  final baseUri = Uri.parse(baseUrl);
+  final targetUri = Uri.parse(trimmed);
+  final baseSegments = _withoutTrailingEmpty(baseUri.pathSegments);
+  final targetSegments = _withoutTrailingEmpty(targetUri.pathSegments);
+
+  final combinedSegments = <String>[];
+  if (trimmed.startsWith('/')) {
+    if (_segmentsHavePrefix(targetSegments, baseSegments) &&
+        targetSegments.isNotEmpty) {
+      combinedSegments.addAll(targetSegments);
+    } else {
+      combinedSegments
+        ..addAll(baseSegments)
+        ..addAll(targetSegments);
+    }
+  } else {
+    combinedSegments
+      ..addAll(baseSegments)
+      ..addAll(targetSegments);
+  }
+
+  final pathBuffer = StringBuffer();
+  if (combinedSegments.isEmpty) {
+    pathBuffer.write('/');
+  } else {
+    pathBuffer.write('/');
+    pathBuffer.writeAll(combinedSegments, '/');
+    if (trimmed.endsWith('/')) {
+      pathBuffer.write('/');
+    }
+  }
+
+  final resolved = baseUri.replace(
+    path: pathBuffer.toString(),
+    query: targetUri.hasQuery ? targetUri.query : null,
+    fragment: targetUri.hasFragment ? targetUri.fragment : null,
+  );
+
+  return resolved.toString();
+}
+
+bool _segmentsHavePrefix(List<String> segments, List<String> prefix) {
+  if (prefix.isEmpty) {
+    return true;
+  }
+  if (segments.length < prefix.length) {
+    return false;
+  }
+  for (var i = 0; i < prefix.length; i++) {
+    if (segments[i] != prefix[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+List<String> _withoutTrailingEmpty(List<String> segments) {
+  var end = segments.length;
+  while (end > 0 && segments[end - 1].isEmpty) {
+    end--;
+  }
+  if (end == segments.length) {
+    return List<String>.from(segments);
+  }
+  return segments.sublist(0, end);
 }
 
 /// HASH

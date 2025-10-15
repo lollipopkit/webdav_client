@@ -39,6 +39,19 @@ void main() {
       );
     });
 
+    test('avoids duplicating base path for collection-qualified targets', () {
+      final resolved = resolveAgainstBaseUrl(
+        base,
+        '/remote.php/dav/files/alice/target.txt',
+      );
+      expect(
+        resolved,
+        equals(
+          'https://example.com/remote.php/dav/files/alice/target.txt',
+        ),
+      );
+    });
+
     test('retains query strings supplied with absolute paths', () {
       final resolved = resolveAgainstBaseUrl(
         '$base/',
