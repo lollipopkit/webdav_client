@@ -4,8 +4,8 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:test/test.dart';
-import 'package:webdav_client_plus/webdav_client_plus.dart';
 import 'package:webdav_client_plus/src/utils.dart';
+import 'package:webdav_client_plus/webdav_client_plus.dart';
 import 'package:xml/xml.dart';
 
 void main() {
@@ -64,7 +64,7 @@ void main() {
     server.listen((request) async {
       if (request.method == 'REPORT') {
         capturedPath = request.uri.path;
-        capturedDepth = request.headers.value('depth');
+        capturedDepth = request.headers.value('Depth');
         capturedBody = await utf8.decoder.bind(request).join();
         request.response
           ..statusCode = HttpStatus.ok
@@ -78,7 +78,8 @@ void main() {
     });
 
     final client = WebdavClient.noAuth(
-      url: 'http://${server.address.host}:${server.port}/remote.php/dav/files/alice',
+      url:
+          'http://${server.address.host}:${server.port}/remote.php/dav/files/alice',
     );
 
     final response = await client.request<String>(
@@ -95,7 +96,8 @@ void main() {
     expect(capturedBody, '<request/>');
   });
 
-  test('request helper keeps leading slash targets within base prefix when present',
+  test(
+      'request helper keeps leading slash targets within base prefix when present',
       () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() async => server.close(force: true));
@@ -113,7 +115,8 @@ void main() {
     });
 
     final client = WebdavClient.noAuth(
-      url: 'http://${server.address.host}:${server.port}/remote.php/dav/files/alice',
+      url:
+          'http://${server.address.host}:${server.port}/remote.php/dav/files/alice',
     );
 
     final response = await client.request<String>(
@@ -146,7 +149,8 @@ void main() {
     });
 
     final client = WebdavClient.noAuth(
-      url: 'http://${server.address.host}:${server.port}/remote.php/dav/files/alice',
+      url:
+          'http://${server.address.host}:${server.port}/remote.php/dav/files/alice',
     );
 
     final response = await client.request<String>(
@@ -223,7 +227,8 @@ void main() {
     expect(capturedPath, expectedUri.path);
   });
 
-  test('conditionalPut combines lock token and etag within single list', () async {
+  test('conditionalPut combines lock token and etag within single list',
+      () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() async => server.close(force: true));
 
@@ -580,8 +585,7 @@ void main() {
     addTearDown(() async => server.close(force: true));
 
     server.listen((request) async {
-      if (request.method == 'DELETE' &&
-          request.uri.path == '/broken-folder/') {
+      if (request.method == 'DELETE' && request.uri.path == '/broken-folder/') {
         await request.drain();
         const body = '''
 <?xml version="1.0" encoding="utf-8"?>
@@ -627,7 +631,7 @@ void main() {
     String? capturedDestination;
     server.listen((request) async {
       if (request.method == 'COPY') {
-        capturedDestination = request.headers.value('destination');
+        capturedDestination = request.headers.value('Destination');
         await request.drain();
         request.response.statusCode = HttpStatus.created;
       } else {
@@ -655,7 +659,7 @@ void main() {
     String? capturedDestination;
     server.listen((request) async {
       if (request.method == 'COPY') {
-        capturedDestination = request.headers.value('destination');
+        capturedDestination = request.headers.value('Destination');
         await request.drain();
         request.response.statusCode = HttpStatus.created;
       } else {

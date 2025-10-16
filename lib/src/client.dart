@@ -315,8 +315,7 @@ class WebdavClient {
       return const {};
     }
 
-    final normalized =
-        <String, Map<int, Map<String, XmlElement>>>{};
+    final normalized = <String, Map<int, Map<String, XmlElement>>>{};
     rawMap.forEach((href, statuses) {
       final key = href.isNotEmpty ? href : path;
       final statusMap =
@@ -488,7 +487,8 @@ class WebdavClient {
   /// - [newPath] of the resource
   /// - [overwrite] If true, the destination will be overwritten
   /// - [cancelToken] for cancelling the request
-  /// - [depth] of the PROPFIND request
+  /// - [depth] sets the MOVE `Depth` header (RFC 4918 §10.2 only allows
+  ///   `PropsDepth.infinity`)
   /// - [ifHeader] supplies preconditions such as lock tokens via an HTTP If header
   /// {@endtemplate}
   Future<void> rename(
@@ -499,11 +499,10 @@ class WebdavClient {
     PropsDepth? depth,
     String? ifHeader,
   }) {
-    if (depth != null &&
-        depth != PropsDepth.infinity &&
-        oldPath.endsWith('/')) {
-      // If endpoint is a collection, depth must be infinity
-      depth = PropsDepth.infinity;
+    if (depth != null && depth != PropsDepth.infinity) {
+      throw ArgumentError(
+        'MOVE requests only support Depth.infinity per RFC 4918 §10.2',
+      );
     }
 
     return _client.wdCopyMove(
@@ -512,7 +511,7 @@ class WebdavClient {
       false,
       overwrite,
       cancelToken: cancelToken,
-      depth: depth ?? PropsDepth.infinity,
+      depth: PropsDepth.infinity,
       ifHeader: ifHeader,
     );
   }
@@ -851,8 +850,7 @@ class WebdavClient {
 
     // Construct the If header
     if (lockToken != null || etag != null) {
-      final ifHeader =
-          _buildIfHeader(url, path, lockToken, etag, notTag);
+      final ifHeader = _buildIfHeader(url, path, lockToken, etag, notTag);
       if (ifHeader.isNotEmpty) {
         requestHeaders['If'] = ifHeader;
       }
@@ -1007,7 +1005,8 @@ List<MultiStatusResponse> parseMultiStatus(String xmlString) {
 
   for (final responseElement in findAllElements(document, 'response')) {
     final href = getElementText(responseElement, 'href');
-    final decodedHref = href != null && href.isNotEmpty ? _decodeHref(href) : '';
+    final decodedHref =
+        href != null && href.isNotEmpty ? _decodeHref(href) : '';
 
     final overallStatusElement = responseElement.childElements.firstWhereOrNull(
       (element) =>
@@ -1021,7 +1020,8 @@ List<MultiStatusResponse> parseMultiStatus(String xmlString) {
     final errorElement = responseElement.childElements.firstWhereOrNull(
       (element) => element.name.local == 'error',
     );
-    final responseDescriptionElement = responseElement.childElements.firstWhereOrNull(
+    final responseDescriptionElement =
+        responseElement.childElements.firstWhereOrNull(
       (element) => element.name.local == 'responsedescription',
     );
     final locationElement = responseElement.childElements.firstWhereOrNull(
@@ -1145,9 +1145,8 @@ List<String> parsePropPatchFailureMessages(String xmlString) {
     for (final propstat in response.propstats) {
       final status = propstat.statusCode;
       if (status != null && status >= 400) {
-        final propNames = propstat.properties.values
-            .map(_formatPropertyName)
-            .toList();
+        final propNames =
+            propstat.properties.values.map(_formatPropertyName).toList();
         final statusText = propstat.rawStatus ?? 'HTTP status $status';
         failures.add(
           'Failed to update properties for ${response.href}: '
@@ -1177,9 +1176,8 @@ List<String> parseMultiStatusFailureMessages(String xmlString) {
         continue;
       }
       final statusText = propstat.rawStatus ?? 'HTTP status $statusCode';
-      final props = propstat.properties.values
-          .map(_formatPropertyName)
-          .toList();
+      final props =
+          propstat.properties.values.map(_formatPropertyName).toList();
       final propsSuffix = props.isEmpty ? '' : '. Props: $props';
       failures.add(
         'Failed to process ${response.href}: $statusText$propsSuffix',

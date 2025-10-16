@@ -2,9 +2,14 @@ part of 'client.dart';
 
 final _httpPrefixReg = RegExp(r'(http|https)://');
 
+/// Thin wrapper around `dio` that injects WebDAV-specific behaviour such as
+/// automatic auth retries, base URL resolution and RFC 4918 error translation.
 class _WdDio with DioMixin {
   final WebdavClient client;
 
+  /// Configure the underlying dio mixin with sensible defaults (no automatic
+  /// redirects, passthrough status validation) while wiring the correct adapter
+  /// for the current platform.
   _WdDio({required this.client, BaseOptions? options}) {
     this.options = options ?? BaseOptions();
     this.options.followRedirects = false;
@@ -14,6 +19,13 @@ class _WdDio with DioMixin {
     httpClientAdapter = getAdapter();
   }
 
+  /// Issue an HTTP request using WebDAV-aware defaults.
+  ///
+  /// - Resolves relative [path] entries against [client.url].
+  /// - Injects Authorization headers via the configured [Auth] strategy.
+  /// - Retries 401 responses once when a Digest challenge is received.
+  /// - Preserves the raw [Response] so higher-level helpers can perform
+  ///   RFC-specific validation.
   Future<Response<T>> req<T>(
     String method,
     String path, {
@@ -157,6 +169,7 @@ class _WdDio with DioMixin {
     return resp;
   }
 
+  /// Extract the request-target string (`path?query`) used by auth schemes.
   String _requestTarget(Uri uri) {
     final path = uri.path.isEmpty ? '/' : uri.path;
     if (uri.hasQuery) {
@@ -166,6 +179,8 @@ class _WdDio with DioMixin {
   }
 
   // OPTIONS
+  /// Perform an OPTIONS request, preserving non-2xx statuses unless
+  /// `allowNotFound` is supplied for discovery flows (RFC 4918 §7.7).
   Future<Response<void>> wdOptions(
     String path, {
     CancelToken? cancelToken,
@@ -198,6 +213,7 @@ class _WdDio with DioMixin {
   // }
 
   // PROPFIND
+  /// PROPFIND per RFC 4918 §9.1 returning the raw XML body for parsing.
   Future<Response<String>> wdPropfind(
     String path,
     PropsDepth depth,
@@ -229,6 +245,8 @@ class _WdDio with DioMixin {
   }
 
   /// MKCOL
+  /// Create a new collection per RFC 4918 §9.3, optionally supplying WebDAV
+  /// `If` conditions such as lock tokens.
   Future<Response<void>> wdMkcol(
     String path, {
     CancelToken? cancelToken,
@@ -247,6 +265,8 @@ class _WdDio with DioMixin {
   }
 
   /// DELETE
+  /// Remove resources as defined in RFC 4918 §9.6, returning raw 207 bodies so
+  /// callers can inspect member failures.
   Future<Response<String>> wdDelete(
     String path, {
     CancelToken? cancelToken,
@@ -265,7 +285,10 @@ class _WdDio with DioMixin {
     );
   }
 
-  /// COPY OR MOVE
+  /// COPY or MOVE per RFC 4918 §9.8/§9.9.
+  ///
+  /// Handles automatic parent creation on 409 responses and inspects 207
+  /// Multi-Status bodies to surface child failures inline with SabreDAV.
   Future<void> wdCopyMove(
     String oldPath,
     String newPath,
@@ -284,9 +307,10 @@ class _WdDio with DioMixin {
           client.url,
           newPath,
         );
-        options.headers?['destination'] = destinationHeader;
-        options.headers?['overwrite'] = overwrite == true ? 'T' : 'F';
-        options.headers?['depth'] = depth.value;
+        options.headers ??= <String, dynamic>{};
+        options.headers?['Destination'] = destinationHeader;
+        options.headers?['Overwrite'] = overwrite == true ? 'T' : 'F';
+        options.headers?['Depth'] = depth.value;
         if (ifHeader != null && ifHeader.isNotEmpty) {
           options.headers?['If'] = ifHeader;
         }
@@ -347,7 +371,7 @@ class _WdDio with DioMixin {
     }
   }
 
-  /// read a file with bytes
+  /// Fetch a resource as in-memory bytes, following redirects when necessary.
   Future<Uint8List> wdReadWithBytes(
     String path, {
     void Function(int count, int total)? onProgress,
@@ -390,6 +414,7 @@ class _WdDio with DioMixin {
   }
 
   /// read a file with stream
+  /// Download a resource to [savePath], tracking progress for large responses.
   Future<void> wdReadWithStream(
     String path,
     String savePath, {
@@ -564,6 +589,8 @@ class _WdDio with DioMixin {
   }
 
   /// write a file with bytes
+  /// Ensures the destination parent exists before issuing the PUT so clients
+  /// get a single success/failure result rather than partial MKCOL chains.
   Future<void> wdWriteWithBytes(
     String path,
     Uint8List data, {
@@ -597,6 +624,8 @@ class _WdDio with DioMixin {
   }
 
   /// write a file with stream
+  /// Streamed PUT variant mirroring [wdWriteWithBytes] for large uploads
+  /// without loading the entire payload into memory.
   Future<void> wdWriteWithStream(
     String path,
     Stream<List<int>> data,
@@ -627,6 +656,8 @@ class _WdDio with DioMixin {
     throw _newResponseError(resp);
   }
 
+  /// LOCK per RFC 4918 §9.10, supporting exclusive/shared scopes, timeouts and
+  /// conditional refresh via the `If` header.
   Future<Response<String>> wdLock(
     String path,
     String? dataStr, {
@@ -640,12 +671,23 @@ class _WdDio with DioMixin {
       path,
       data: dataStr,
       optionsHandler: (options) {
-        options.headers?['content-type'] = 'application/xml;charset=UTF-8';
-        options.headers?['Timeout'] = 'Second-$timeout';
-        options.headers?['Depth'] = depth.value;
+        options.headers ??= <String, dynamic>{};
+        final headers = options.headers!;
 
+        headers['Timeout'] = 'Second-$timeout';
         if (ifHeader != null) {
-          options.headers?['If'] = ifHeader;
+          headers['If'] = ifHeader;
+        }
+
+        final hasBody = dataStr != null && dataStr.isNotEmpty;
+        if (hasBody) {
+          headers['Content-Type'] = 'application/xml;charset=UTF-8';
+          headers['Depth'] = depth.value;
+        } else {
+          headers.remove('Content-Type');
+          headers.remove('content-type');
+          headers.remove('Depth');
+          headers.remove('depth');
         }
 
         options.responseType = ResponseType.plain;
@@ -661,6 +703,7 @@ class _WdDio with DioMixin {
     return resp;
   }
 
+  /// UNLOCK per RFC 4918 §9.11, releasing a previously obtained lock token.
   Future<Response<void>> wdUnlock(
     String path,
     String lockToken, {
@@ -678,6 +721,8 @@ class _WdDio with DioMixin {
     return resp;
   }
 
+  /// PROPPATCH per RFC 4918 §9.2, returning the raw 207 response for higher
+  /// level parsing before surfacing aggregated errors.
   Future<Response<String>> wdProppatch(
     String path,
     String dataStr, {
@@ -705,6 +750,7 @@ class _WdDio with DioMixin {
   }
 }
 
+/// Compose PUT headers for uploads, merging caller overrides as needed.
 Map<String, dynamic> buildPutHeaders({
   required int contentLength,
   Map<String, dynamic>? additionalHeaders,
@@ -735,7 +781,7 @@ Map<String, dynamic> buildPutHeaders({
 }
 
 extension on _WdDio {
-  /// Used in [req].
+  /// Extract the advertised WWW-Authenticate scheme from a challenge header.
   String? _extractAuthType(String authHeader) {
     final parts = authHeader.split(' ');
     if (parts.isNotEmpty) {
@@ -745,7 +791,11 @@ extension on _WdDio {
     return null;
   }
 
-  /// create parent folder
+  /// Lazily create intermediate collections for PUT/COPY/MOVE operations.
+  ///
+  /// Mimics SabreDAV's behaviour by walking up the path, issuing MKCOL as
+  /// needed until the target's parent exists, while ensuring we stay within the
+  /// original server authority.
   Future<void>? _createParent(
     String path, {
     CancelToken? cancelToken,
@@ -764,8 +814,7 @@ extension on _WdDio {
     }
 
     if (resolvedUri != null && resolvedUri.hasAuthority) {
-      if (_hasAuthority(baseUri) &&
-          !_authoritiesMatch(baseUri, resolvedUri)) {
+      if (_hasAuthority(baseUri) && !_authoritiesMatch(baseUri, resolvedUri)) {
         return null;
       }
       if (!_hasAuthority(baseUri)) {
@@ -778,9 +827,7 @@ extension on _WdDio {
       return null;
     }
 
-    final normalizedEffective = effectivePath.isEmpty
-        ? '/'
-        : effectivePath;
+    final normalizedEffective = effectivePath.isEmpty ? '/' : effectivePath;
 
     final basePathRaw = baseUri.path.isEmpty ? '/' : baseUri.path;
     var basePath = basePathRaw;
@@ -812,9 +859,10 @@ extension on _WdDio {
     );
   }
 
-  bool _hasAuthority(Uri uri) =>
-      uri.host.isNotEmpty || uri.hasAuthority;
+  /// True when the URI contains authority information (host/port).
+  bool _hasAuthority(Uri uri) => uri.host.isNotEmpty || uri.hasAuthority;
 
+  /// Compare two authorities, accounting for implicit default ports.
   bool _authoritiesMatch(Uri a, Uri b) {
     final schemeA = a.scheme.isEmpty ? 'http' : a.scheme;
     final schemeB = b.scheme.isEmpty ? 'http' : b.scheme;
@@ -831,6 +879,7 @@ extension on _WdDio {
     return portA == portB;
   }
 
+  /// Return the conventional port for a scheme when none was provided.
   int _defaultPortForScheme(String scheme) {
     switch (scheme.toLowerCase()) {
       case 'https':
@@ -842,6 +891,7 @@ extension on _WdDio {
     }
   }
 
+  /// Derive the server-relative path from a potentially absolute target.
   String _serverPathFromTarget(String target) {
     final trimmed = target.trim();
     if (trimmed.isEmpty) {
@@ -850,8 +900,7 @@ extension on _WdDio {
 
     try {
       final uri = Uri.parse(trimmed);
-      if (uri.hasScheme &&
-          (uri.scheme == 'http' || uri.scheme == 'https')) {
+      if (uri.hasScheme && (uri.scheme == 'http' || uri.scheme == 'https')) {
         return uri.path;
       }
       if (!uri.hasScheme) {
