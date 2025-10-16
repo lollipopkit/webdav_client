@@ -31,8 +31,9 @@ class _WdDio with DioMixin {
       optionsHandler(options);
     }
 
-    final rawTarget =
-        path.startsWith(_httpPrefixReg) ? path : joinPath(client.url, path);
+    final rawTarget = path.startsWith(_httpPrefixReg)
+        ? path
+        : resolveAgainstBaseUrl(client.url, path);
     final uri = Uri.parse(rawTarget);
 
     // authorization
@@ -750,9 +751,16 @@ extension on _WdDio {
     CancelToken? cancelToken,
     String? ifHeader,
   }) {
-    final parentPath = path.substring(0, path.lastIndexOf('/') + 1);
-
-    if (parentPath == '' || parentPath == '/') {
+    final effectivePath = _serverPathFromTarget(path);
+    if (effectivePath.isEmpty) {
+      return null;
+    }
+    final slashIndex = effectivePath.lastIndexOf('/');
+    if (slashIndex <= 0) {
+      return null;
+    }
+    final parentPath = effectivePath.substring(0, slashIndex + 1);
+    if (parentPath == '/' || parentPath.isEmpty) {
       return null;
     }
     return client.mkdirAll(
@@ -760,5 +768,42 @@ extension on _WdDio {
       cancelToken: cancelToken,
       ifHeader: ifHeader,
     );
+  }
+
+  String _serverPathFromTarget(String target) {
+    final trimmed = target.trim();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+
+    try {
+      final uri = Uri.parse(trimmed);
+      if (uri.hasScheme &&
+          (uri.scheme == 'http' || uri.scheme == 'https')) {
+        return uri.path;
+      }
+      if (!uri.hasScheme) {
+        if (uri.path.isNotEmpty) {
+          return uri.path;
+        }
+        if (trimmed.startsWith('/')) {
+          return '/';
+        }
+        return trimmed.split('?').first.split('#').first;
+      }
+    } catch (_) {
+      // Fall through to manual stripping.
+    }
+
+    var candidate = trimmed;
+    final queryIndex = candidate.indexOf('?');
+    if (queryIndex != -1) {
+      candidate = candidate.substring(0, queryIndex);
+    }
+    final fragmentIndex = candidate.indexOf('#');
+    if (fragmentIndex != -1) {
+      candidate = candidate.substring(0, fragmentIndex);
+    }
+    return candidate;
   }
 }

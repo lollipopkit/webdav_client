@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:test/test.dart';
 import 'package:webdav_client_plus/webdav_client_plus.dart';
+import 'package:webdav_client_plus/src/utils.dart';
 import 'package:xml/xml.dart';
 
 void main() {
@@ -94,6 +95,39 @@ void main() {
     expect(capturedBody, '<request/>');
   });
 
+  test('request helper normalizes dot-segments when resolving relative targets',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+
+    String? capturedPath;
+
+    server.listen((request) async {
+      capturedPath = request.uri.path;
+      await request.drain();
+      request.response
+        ..statusCode = HttpStatus.ok
+        ..headers.contentType = ContentType('text', 'plain')
+        ..write('ok');
+      await request.response.close();
+    });
+
+    final baseUrl =
+        'http://${server.address.host}:${server.port}/remote.php/dav/files/alice/subdir/';
+    final client = WebdavClient.noAuth(url: baseUrl);
+
+    final response = await client.request<String>(
+      'GET',
+      target: '../shared/report.txt',
+      configure: (options) => options.responseType = ResponseType.plain,
+    );
+
+    expect(response.data, 'ok');
+    final expectedUri =
+        Uri.parse(resolveAgainstBaseUrl(baseUrl, '../shared/report.txt'));
+    expect(capturedPath, expectedUri.path);
+  });
+
   test('conditionalPut combines lock token and etag within single list', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() async => server.close(force: true));
@@ -127,6 +161,56 @@ void main() {
       equals(
         '<$expectedResource> (<opaquelocktoken:token123> ["etag-abc"])',
       ),
+    );
+  });
+
+  test('write with absolute URI only creates server-relative collections',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+
+    final mkcolPaths = <String>[];
+    String? putPath;
+
+    server.listen((request) async {
+      if (request.method == 'MKCOL') {
+        mkcolPaths.add(request.uri.path);
+        await request.drain();
+        request.response.statusCode = HttpStatus.created;
+      } else if (request.method == 'PUT') {
+        putPath = request.uri.path;
+        await request.drain();
+        request.response.statusCode = HttpStatus.created;
+      } else {
+        request.response.statusCode = HttpStatus.methodNotAllowed;
+      }
+      await request.response.close();
+    });
+
+    final baseUrl =
+        'http://${server.address.host}:${server.port}/remote.php/dav/files/alice/';
+    final client = WebdavClient.noAuth(url: baseUrl);
+
+    final absoluteTarget =
+        'http://${server.address.host}:${server.port}/remote.php/dav/files/alice/new-dir/note.txt';
+
+    await client.write(
+      absoluteTarget,
+      Uint8List.fromList('hi'.codeUnits),
+    );
+
+    expect(mkcolPaths, isNotEmpty);
+    expect(
+      mkcolPaths,
+      everyElement(isNot(startsWith('http'))),
+    );
+    expect(
+      mkcolPaths,
+      contains('/remote.php/dav/files/alice/new-dir/'),
+    );
+    expect(
+      putPath,
+      '/remote.php/dav/files/alice/new-dir/note.txt',
     );
   });
 
