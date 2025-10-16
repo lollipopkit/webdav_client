@@ -751,15 +751,57 @@ extension on _WdDio {
     CancelToken? cancelToken,
     String? ifHeader,
   }) {
-    final effectivePath = _serverPathFromTarget(path);
+    final baseUri = Uri.parse(client.url);
+
+    Uri? resolvedUri;
+    try {
+      final resolvedTarget = path.startsWith(_httpPrefixReg)
+          ? path
+          : resolveAgainstBaseUrl(client.url, path);
+      resolvedUri = Uri.parse(resolvedTarget);
+    } catch (_) {
+      resolvedUri = null;
+    }
+
+    if (resolvedUri != null && resolvedUri.hasAuthority) {
+      if (_hasAuthority(baseUri) &&
+          !_authoritiesMatch(baseUri, resolvedUri)) {
+        return null;
+      }
+      if (!_hasAuthority(baseUri)) {
+        return null;
+      }
+    }
+
+    final effectivePath = resolvedUri?.path ?? _serverPathFromTarget(path);
     if (effectivePath.isEmpty) {
       return null;
     }
-    final slashIndex = effectivePath.lastIndexOf('/');
+
+    final normalizedEffective = effectivePath.isEmpty
+        ? '/'
+        : effectivePath;
+
+    final basePathRaw = baseUri.path.isEmpty ? '/' : baseUri.path;
+    var basePath = basePathRaw;
+    if (basePath != '/' && !basePath.endsWith('/')) {
+      basePath = '$basePath/';
+    }
+
+    if (basePath != '/') {
+      final comparisonPath = normalizedEffective.endsWith('/')
+          ? normalizedEffective
+          : '$normalizedEffective/';
+      if (!comparisonPath.startsWith(basePath)) {
+        return null;
+      }
+    }
+
+    final slashIndex = normalizedEffective.lastIndexOf('/');
     if (slashIndex <= 0) {
       return null;
     }
-    final parentPath = effectivePath.substring(0, slashIndex + 1);
+    final parentPath = normalizedEffective.substring(0, slashIndex + 1);
     if (parentPath == '/' || parentPath.isEmpty) {
       return null;
     }
@@ -768,6 +810,36 @@ extension on _WdDio {
       cancelToken: cancelToken,
       ifHeader: ifHeader,
     );
+  }
+
+  bool _hasAuthority(Uri uri) =>
+      uri.host.isNotEmpty || uri.hasAuthority;
+
+  bool _authoritiesMatch(Uri a, Uri b) {
+    final schemeA = a.scheme.isEmpty ? 'http' : a.scheme;
+    final schemeB = b.scheme.isEmpty ? 'http' : b.scheme;
+    if (schemeA.toLowerCase() != schemeB.toLowerCase()) {
+      return false;
+    }
+    final hostA = a.host.toLowerCase();
+    final hostB = b.host.toLowerCase();
+    if (hostA != hostB) {
+      return false;
+    }
+    final portA = a.hasPort ? a.port : _defaultPortForScheme(schemeA);
+    final portB = b.hasPort ? b.port : _defaultPortForScheme(schemeB);
+    return portA == portB;
+  }
+
+  int _defaultPortForScheme(String scheme) {
+    switch (scheme.toLowerCase()) {
+      case 'https':
+        return 443;
+      case 'http':
+        return 80;
+      default:
+        return 0;
+    }
   }
 
   String _serverPathFromTarget(String target) {

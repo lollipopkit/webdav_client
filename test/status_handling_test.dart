@@ -214,6 +214,78 @@ void main() {
     );
   });
 
+  test('write with absolute URI outside base skips auto MKCOL', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+
+    final mkcolPaths = <String>[];
+    String? putPath;
+
+    server.listen((request) async {
+      if (request.method == 'MKCOL') {
+        mkcolPaths.add(request.uri.path);
+      } else if (request.method == 'PUT') {
+        putPath = request.uri.path;
+      } else {
+        request.response.statusCode = HttpStatus.methodNotAllowed;
+      }
+      await request.drain();
+      request.response.statusCode = HttpStatus.created;
+      await request.response.close();
+    });
+
+    final baseUrl =
+        'http://${server.address.host}:${server.port}/remote.php/dav/files/alice/';
+    final client = WebdavClient.noAuth(url: baseUrl);
+
+    final absoluteTarget =
+        'http://${server.address.host}:${server.port}/outside/new-folder/note.txt';
+
+    await client.write(
+      absoluteTarget,
+      Uint8List.fromList('hi'.codeUnits),
+    );
+
+    expect(mkcolPaths, isEmpty);
+    expect(putPath, '/outside/new-folder/note.txt');
+  });
+
+  test('write with different authority skips auto MKCOL', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+
+    final mkcolPaths = <String>[];
+    String? putPath;
+
+    server.listen((request) async {
+      if (request.method == 'MKCOL') {
+        mkcolPaths.add(request.uri.path);
+      } else if (request.method == 'PUT') {
+        putPath = request.uri.path;
+      } else {
+        request.response.statusCode = HttpStatus.methodNotAllowed;
+      }
+      await request.drain();
+      request.response.statusCode = HttpStatus.created;
+      await request.response.close();
+    });
+
+    final baseUrl =
+        'http://localhost:${server.port}/remote.php/dav/files/alice/';
+    final client = WebdavClient.noAuth(url: baseUrl);
+
+    final absoluteTarget =
+        'http://${server.address.host}:${server.port}/remote.php/dav/files/alice/new-dir/note.txt';
+
+    await client.write(
+      absoluteTarget,
+      Uint8List.fromList('hi'.codeUnits),
+    );
+
+    expect(mkcolPaths, isEmpty);
+    expect(putPath, '/remote.php/dav/files/alice/new-dir/note.txt');
+  });
+
   test('PROPFIND tolerates HTTP 200 responses', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() async => server.close(force: true));
