@@ -22,11 +22,15 @@ void main() {
 
     expect(
       entry.customProps['http://example.com/custom:meta'],
-      contains('<custom:child>value</custom:child>'),
+      equals('<custom:meta><custom:child>value</custom:child></custom:meta>'),
     );
     expect(
       entry.customProps['http://example.com/custom:empty'],
       isEmpty,
+    );
+    expect(
+      entry.customProps['http://example.com/custom:label'],
+      equals('<custom:label xml:lang="en">Hello</custom:label>'),
     );
   });
 }
@@ -60,6 +64,7 @@ const _customPropFindRaw = '''
           <custom:child>value</custom:child>
         </custom:meta>
         <custom:empty/>
+        <custom:label xml:lang="en">Hello</custom:label>
       </d:prop>
       <d:status>HTTP/1.1 200 OK</d:status>
     </d:propstat>
