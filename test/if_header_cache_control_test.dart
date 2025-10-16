@@ -78,4 +78,40 @@ void main() {
     expect(cacheControl, equals('no-cache, max-age=0'));
     expect(pragma, equals('no-cache, custom'));
   });
+
+  test('conditionalPut keeps lock tokens positive while negating etags',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+
+    String? ifHeader;
+
+    server.listen((request) async {
+      if (request.method == 'PUT') {
+        ifHeader = request.headers.value('if');
+        await request.drain();
+        request.response.statusCode = HttpStatus.created;
+      } else {
+        request.response.statusCode = HttpStatus.ok;
+      }
+      await request.response.close();
+    });
+
+    final client = WebdavClient.noAuth(
+      url: 'http://${server.address.host}:${server.port}',
+    );
+
+    await client.conditionalPut(
+      '/report.txt',
+      Uint8List.fromList([7, 8, 9]),
+      lockToken: 'opaquelocktoken:positive-case',
+      etag: 'etag-value',
+      notTag: true,
+    );
+
+    expect(ifHeader, isNotNull);
+    expect(ifHeader, contains('<opaquelocktoken:positive-case>'));
+    expect(ifHeader, isNot(contains('Not <opaquelocktoken:positive-case>')));
+    expect(ifHeader, contains('Not ["etag-value"]'));
+  });
 }

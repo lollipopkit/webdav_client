@@ -69,6 +69,7 @@ extension WebdavClientPropfind on WebdavClient {
   /// - [data] to write
   /// - [lockToken] If the resource is locked, the lock token must match
   /// - [etag] If the resource has an etag, it must match the etag in the request
+  /// - [notTag] When true, negates the supplied [etag] per RFC 4918 §10.4.5
   Future<void> conditionalPut(
     String path,
     Uint8List data, {

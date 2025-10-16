@@ -347,12 +347,10 @@ extension _Utils on WebdavClient {
 
     final conditionElements = <String>[];
     if (lockToken != null) {
-      // 确保锁令牌格式正确
+      // Lock tokens prove knowledge per RFC 4918 §7.5, so they must remain positive.
       final formattedLockToken =
           lockToken.startsWith('<') ? lockToken : '<$lockToken>';
-      conditionElements.add(
-        notTag ? 'Not $formattedLockToken' : formattedLockToken,
-      );
+      conditionElements.add(formattedLockToken);
     }
 
     if (etag != null) {
