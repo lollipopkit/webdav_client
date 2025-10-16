@@ -28,7 +28,8 @@ void main() {
     final metaValue = entry.customProps['http://example.com/custom:meta'];
     expect(
       _normalizeXml(metaValue),
-      equals(_normalizeXml('<custom:meta><custom:child>value</custom:child></custom:meta>')),
+      equals(_normalizeXml(
+          '<custom:meta><custom:child>value</custom:child></custom:meta>')),
     );
     expect(
       entry.customProps['http://example.com/custom:empty'],
@@ -41,7 +42,8 @@ void main() {
     );
   });
 
-  test('parseFiles skips collection self entry regardless of response order', () {
+  test('parseFiles skips collection self entry regardless of response order',
+      () {
     final files = WebdavFile.parseFiles('/collection/', _collectionOutOfOrder);
     expect(
       files.map((file) => file.path).toList(),

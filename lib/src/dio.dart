@@ -43,6 +43,30 @@ class _WdDio with DioMixin {
       optionsHandler(options);
     }
 
+    final headers = options.headers;
+    if (headers != null) {
+      final hasIfHeader = headers.entries.any(
+        (entry) =>
+            entry.key.toLowerCase() == 'if' &&
+            entry.value != null &&
+            entry.value.toString().isNotEmpty,
+      );
+      if (hasIfHeader) {
+        final hasCacheControl = headers.keys.any(
+          (key) => key.toLowerCase() == 'cache-control',
+        );
+        if (!hasCacheControl) {
+          headers['Cache-Control'] = 'no-cache';
+        }
+        final hasPragma = headers.keys.any(
+          (key) => key.toLowerCase() == 'pragma',
+        );
+        if (!hasPragma) {
+          headers['Pragma'] = 'no-cache';
+        }
+      }
+    }
+
     final rawTarget = path.startsWith(_httpPrefixReg)
         ? path
         : resolveAgainstBaseUrl(client.url, path);

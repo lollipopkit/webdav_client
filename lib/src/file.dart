@@ -169,9 +169,8 @@ class WebdavFile {
 
       final hasComplexContent =
           element.childElements.isNotEmpty || element.attributes.isNotEmpty;
-      final value = hasComplexContent
-          ? element.toXmlString()
-          : element.innerText;
+      final value =
+          hasComplexContent ? element.toXmlString() : element.innerText;
       customProps[propName] = value;
     }
 

@@ -1,6 +1,9 @@
 # Changelog
 
 ### Unreleased
+- Allowed `WebdavClient.copy` to request `Depth: 0` transfers per RFC 4918 §9.8 while rejecting unsupported depths.
+- Preferred the `Lock-Token` response header when returning lock tokens and retained XML fallbacks for RFC 4918 §§9.10.1/10.5 compliance.
+- Added automatic `Cache-Control`/`Pragma: no-cache` headers whenever an `If` header is sent, following RFC 4918 §10.4.5 guidance for proxy safety.
 - Removed redundant OPTIONS preflights before GET/PUT operations to reduce latency and follow RFC 4918 guidance.
 - Normalized `resolveAgainstBaseUrl` output to strip dot-segments per RFC 4918 §8.3, avoiding malformed Destination headers.
 - Treated leading-slash references as server-root URLs in `resolveAgainstBaseUrl`, aligning Destination/If header construction with RFC 4918 §8.3.

@@ -562,7 +562,14 @@ class WebdavClient {
     bool overwrite = false,
     CancelToken? cancelToken,
     String? ifHeader,
+    PropsDepth depth = PropsDepth.infinity,
   }) {
+    if (depth == PropsDepth.one) {
+      throw ArgumentError(
+        'COPY requests only support Depth 0 or infinity per RFC 4918 §9.8',
+      );
+    }
+
     return _client.wdCopyMove(
       oldPath,
       newPath,
@@ -570,6 +577,7 @@ class WebdavClient {
       overwrite,
       cancelToken: cancelToken,
       ifHeader: ifHeader,
+      depth: depth,
     );
   }
 
@@ -766,8 +774,23 @@ class WebdavClient {
       throw _newResponseError(resp);
     }
 
-    final str = resp.data as String;
-    return _extractLockToken(str);
+    final headerToken =
+        _extractLockTokenFromHeaderValue(resp.headers.value('lock-token'));
+    if (headerToken != null && headerToken.isNotEmpty) {
+      return headerToken;
+    }
+
+    final data = resp.data;
+    if (data is String && data.isNotEmpty) {
+      return _extractLockToken(data);
+    }
+
+    throw WebdavException(
+      message: 'No lock token found in response',
+      statusCode: status,
+      statusMessage: resp.statusMessage,
+      response: resp,
+    );
   }
 
   /// Unlock a resource
@@ -1244,6 +1267,21 @@ extension _Utils on WebdavClient {
       message: 'No lock token found in response',
       statusCode: 500,
     );
+  }
+
+  String? _extractLockTokenFromHeaderValue(String? headerValue) {
+    if (headerValue == null) {
+      return null;
+    }
+    final match = RegExp(r'<\s*([^>]+)\s*>').firstMatch(headerValue);
+    if (match != null) {
+      final token = match.group(1)?.trim();
+      if (token != null && token.isNotEmpty) {
+        return token;
+      }
+    }
+    final trimmed = headerValue.trim();
+    return trimmed.isEmpty ? null : trimmed;
   }
 
   String? _extractLockTokenFromIfHeader(String ifHeader) {

@@ -83,7 +83,9 @@ void main() {
       final responses = parseMultiStatus(xml);
       final response = responses.single;
       expect(response.error, isNotNull);
-      expect(response.error!.findElements('lock-token-submitted', namespace: '*'), isNotEmpty);
+      expect(
+          response.error!.findElements('lock-token-submitted', namespace: '*'),
+          isNotEmpty);
       expect(response.responseDescription, 'The resource is currently locked.');
       expect(response.locationHref, '/locks/info');
     });
