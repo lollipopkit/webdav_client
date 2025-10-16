@@ -83,7 +83,7 @@ void main() {
 
     final response = await client.request<String>(
       'REPORT',
-      target: 'reports/activity',
+      target: '/reports/activity',
       headers: {'Depth': '1'},
       data: '<request/>',
       configure: (options) => options.responseType = ResponseType.plain,
@@ -95,7 +95,7 @@ void main() {
     expect(capturedBody, '<request/>');
   });
 
-  test('request helper routes leading slash targets to the server root',
+  test('request helper keeps leading slash targets within base prefix when present',
       () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() async => server.close(force: true));
@@ -121,6 +121,37 @@ void main() {
       target: '/reports/activity',
       headers: {'Depth': '1'},
       data: '<request/>',
+      configure: (options) => options.responseType = ResponseType.plain,
+    );
+
+    expect(response.data, 'ok');
+    expect(capturedPath, '/remote.php/dav/files/alice/reports/activity');
+  });
+
+  test('request helper allows root-leading slash when base has no path',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+
+    String? capturedPath;
+
+    server.listen((request) async {
+      capturedPath = request.uri.path;
+      await request.drain();
+      request.response
+        ..statusCode = HttpStatus.ok
+        ..headers.contentType = ContentType('text', 'plain')
+        ..write('ok');
+      await request.response.close();
+    });
+
+    final client = WebdavClient.noAuth(
+      url: 'http://${server.address.host}:${server.port}',
+    );
+
+    final response = await client.request<String>(
+      'REPORT',
+      target: '/reports/activity',
       configure: (options) => options.responseType = ResponseType.plain,
     );
 
