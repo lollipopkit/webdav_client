@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:test/test.dart';
-import 'package:webdav_client_plus/src/utils.dart';
+import 'package:webdav_client_plus/src/internal/path_utils.dart';
 import 'package:webdav_client_plus/webdav_client_plus.dart';
 import 'package:xml/xml.dart';
 

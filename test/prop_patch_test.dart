@@ -1,5 +1,5 @@
 import 'package:test/test.dart';
-import 'package:webdav_client_plus/src/client.dart';
+import 'package:webdav_client_plus/src/client/client.dart';
 
 void main() {
   group('parsePropPatchFailureMessages', () {

@@ -1,5 +1,5 @@
-import 'package:webdav_client_plus/src/utils.dart';
-import 'package:webdav_client_plus/webdav_client_plus.dart';
+import 'package:webdav_client_plus/src/enums.dart';
+import 'package:webdav_client_plus/src/internal/xml_utils.dart';
 import 'package:xml/xml.dart';
 
 /// WebdavFile class
@@ -106,7 +106,6 @@ class WebdavFile {
 
       // Create WebdavFile from prop data
       final file = parse(path, decodedHref, prop);
-      // print(file);
       files.add(file);
     }
 

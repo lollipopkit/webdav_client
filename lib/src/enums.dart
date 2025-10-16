@@ -1,4 +1,4 @@
-import 'package:webdav_client_plus/src/utils.dart';
+import 'package:webdav_client_plus/src/internal/property_resolution.dart';
 import 'package:xml/xml.dart';
 
 /// Depth of the PROPFIND request

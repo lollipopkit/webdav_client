@@ -4,6 +4,6 @@
 library;
 
 export 'src/auth.dart';
-export 'src/client.dart';
+export 'src/client/client.dart';
 export 'src/enums.dart';
-export 'src/file.dart';
+export 'src/models/webdav_file.dart';

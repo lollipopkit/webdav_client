@@ -1,5 +1,5 @@
 import 'package:test/test.dart';
-import 'package:webdav_client_plus/src/utils.dart';
+import 'package:webdav_client_plus/src/internal/path_utils.dart';
 
 void main() {
   group('resolveAgainstBaseUrl', () {

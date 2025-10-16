@@ -1,5 +1,6 @@
 import 'dart:convert';
-import 'package:webdav_client_plus/src/utils.dart';
+
+import 'package:webdav_client_plus/src/internal/hash_utils.dart';
 
 /// Auth for WebDAV client
 sealed class Auth {
