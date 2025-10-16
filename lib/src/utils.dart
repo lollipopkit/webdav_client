@@ -89,12 +89,11 @@ String resolveAgainstBaseUrl(String baseUrl, String target) {
   final combinedSegments = <String>[];
   if (trimmed.startsWith('/')) {
     final matchesPrefix = _segmentsHavePrefix(targetSegments, baseSegments);
-    if (matchesPrefix && targetSegments.isNotEmpty) {
-      combinedSegments.addAll(targetSegments);
-    } else if (targetSegments.isEmpty) {
+    if (targetSegments.isEmpty) {
       combinedSegments.addAll(baseSegments);
+    } else if (matchesPrefix) {
+      combinedSegments.addAll(targetSegments);
     } else if (baseSegments.isNotEmpty &&
-        targetSegments.isNotEmpty &&
         targetSegments.first != baseSegments.first) {
       combinedSegments
         ..addAll(baseSegments)

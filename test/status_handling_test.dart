@@ -83,7 +83,7 @@ void main() {
 
     final response = await client.request<String>(
       'REPORT',
-      target: '/reports/activity',
+      target: 'reports/activity',
       headers: {'Depth': '1'},
       data: '<request/>',
       configure: (options) => options.responseType = ResponseType.plain,
