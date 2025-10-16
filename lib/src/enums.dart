@@ -42,7 +42,7 @@ enum PropfindType {
   }) {
     return switch (this) {
       prop => _buildPropXml(properties, namespaceMap: namespaceMap),
-      allprop => _buildAllPropXml(),
+      allprop => _buildAllPropXml(properties, namespaceMap: namespaceMap),
       propname => _buildPropNameXml(),
     };
   }
@@ -86,12 +86,37 @@ enum PropfindType {
     return xmlBuilder.buildDocument().toString();
   }
 
-  static String _buildAllPropXml() {
+  static String _buildAllPropXml(
+    List<String> includeProperties, {
+    Map<String, String> namespaceMap = const <String, String>{},
+  }) {
+    PropertyResolutionResult? includeResolution;
+    if (includeProperties.isNotEmpty) {
+      includeResolution = resolvePropertyNames(
+        includeProperties,
+        namespaceMap: namespaceMap,
+      );
+    }
+
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:propfind', nest: () {
       xmlBuilder.namespace('DAV:', 'd');
+      final resolution = includeResolution;
+      if (resolution != null) {
+        resolution.namespaces.forEach((prefix, uri) {
+          if (prefix == 'd') return;
+          xmlBuilder.namespace(uri, prefix);
+        });
+      }
       xmlBuilder.element('d:allprop');
+      if (resolution != null && resolution.properties.isNotEmpty) {
+        xmlBuilder.element('d:include', nest: () {
+          for (final prop in resolution.properties) {
+            xmlBuilder.element(prop.qualifiedName);
+          }
+        });
+      }
     });
     return xmlBuilder.buildDocument().toString();
   }

@@ -107,10 +107,16 @@ PropertyResolutionResult resolvePropertyNames(
       final separatorIndex = property.indexOf(':');
       final prefix = property.substring(0, separatorIndex);
       final localName = property.substring(separatorIndex + 1);
-      final namespaceUri = mergedNamespaces.putIfAbsent(
-        prefix,
-        () => 'http://example.com/ns/$prefix',
-      );
+      if (localName.isEmpty) {
+        throw ArgumentError('Property name "$property" is not valid');
+      }
+      final namespaceUri = mergedNamespaces[prefix];
+      if (namespaceUri == null) {
+        throw ArgumentError(
+          'Namespace prefix "$prefix" is not defined. Provide it via the '
+          '`namespaces` map or use Clark notation.',
+        );
+      }
 
       resolvedName = ResolvedPropertyName(
         qualifiedName: '$prefix:$localName',

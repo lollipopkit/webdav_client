@@ -164,12 +164,17 @@ void main() {
           'custom:test-prop': 'test-value',
           'custom:another-prop': 'another-value',
         };
-        await client.setProps('/$_testDir/props_test.txt', props);
+        await client.setProps(
+          '/$_testDir/props_test.txt',
+          props,
+          namespaces: const {'custom': 'http://example.com/custom'},
+        );
 
         await client.modifyProps(
           '/$_testDir/props_test.txt',
           setProps: {'custom:updated-prop': 'updated-value'},
           removeProps: ['custom:another-prop'],
+          namespaces: const {'custom': 'http://example.com/custom'},
         );
       } catch (e) {
         if (e is WebdavException &&
@@ -232,6 +237,7 @@ void main() {
         () => client.modifyProps(
           '/non-existent-file.txt',
           setProps: {'custom:prop': 'value'},
+          namespaces: const {'custom': 'http://example.com/custom'},
         ),
         throwsA(isA<WebdavException<Object>>()),
       );
