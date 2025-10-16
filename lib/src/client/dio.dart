@@ -202,6 +202,22 @@ class _WdDio with DioMixin {
     return path;
   }
 
+  String _serializeTimeoutHeader(
+    int timeoutSeconds,
+    List<LockTimeout> preferences,
+  ) {
+    if (preferences.isNotEmpty) {
+      return preferences
+          .map((pref) => pref.headerValue)
+          .where((value) => value.isNotEmpty)
+          .join(', ');
+    }
+    if (timeoutSeconds <= 0) {
+      return 'Infinite';
+    }
+    return 'Second-$timeoutSeconds';
+  }
+
   // OPTIONS
   /// Perform an OPTIONS request, preserving non-2xx statuses unless
   /// `allowNotFound` is supplied for discovery flows (RFC 4918 §7.7).
@@ -300,6 +316,8 @@ class _WdDio with DioMixin {
       'DELETE',
       path,
       optionsHandler: (options) {
+        options.headers ??= <String, dynamic>{};
+        options.headers?['Depth'] = 'infinity'; // RFC 4918 §9.6.1
         if (ifHeader != null && ifHeader.isNotEmpty) {
           options.headers?['If'] = ifHeader;
         }
@@ -686,6 +704,7 @@ class _WdDio with DioMixin {
     String path,
     String? dataStr, {
     int timeout = 3600,
+    List<LockTimeout> timeoutPreferences = const <LockTimeout>[],
     PropsDepth depth = PropsDepth.infinity,
     String? ifHeader,
     CancelToken? cancelToken,
@@ -698,7 +717,8 @@ class _WdDio with DioMixin {
         options.headers ??= <String, dynamic>{};
         final headers = options.headers!;
 
-        headers['Timeout'] = 'Second-$timeout';
+        headers['Timeout'] =
+            _serializeTimeoutHeader(timeout, timeoutPreferences);
         if (ifHeader != null) {
           headers['If'] = ifHeader;
         }

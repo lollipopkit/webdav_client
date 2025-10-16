@@ -79,4 +79,52 @@ void main() {
     final token = await client.lock('/resource.txt');
     expect(token, equals('opaquelocktoken:body-only'));
   });
+
+  test('lock advertises timeout preferences per RFC 4918 §10.7', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+
+    String? timeoutHeader;
+
+    const xmlResponse = '''
+<?xml version="1.0" encoding="utf-8"?>
+<d:prop xmlns:d="DAV:">
+  <d:lockdiscovery>
+    <d:activelock>
+      <d:locktoken><d:href>opaquelocktoken:timeout-pref</d:href></d:locktoken>
+    </d:activelock>
+  </d:lockdiscovery>
+</d:prop>
+''';
+
+    server.listen((request) async {
+      if (request.method == 'LOCK') {
+        timeoutHeader = request.headers.value('timeout');
+        await request.drain();
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType =
+              ContentType('application', 'xml', charset: 'utf-8')
+          ..write(xmlResponse);
+      } else {
+        request.response.statusCode = HttpStatus.notFound;
+      }
+      await request.response.close();
+    });
+
+    final client = WebdavClient.noAuth(
+      url: 'http://${server.address.host}:${server.port}',
+    );
+
+    final token = await client.lock(
+      '/resource.txt',
+      timeoutPreferences: [
+        LockTimeout.seconds(30),
+        const LockTimeout.infinite(),
+      ],
+    );
+
+    expect(token, equals('opaquelocktoken:timeout-pref'));
+    expect(timeoutHeader, equals('Second-30, Infinite'));
+  });
 }

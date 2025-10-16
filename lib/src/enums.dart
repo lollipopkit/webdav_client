@@ -106,3 +106,45 @@ enum PropfindType {
     return xmlBuilder.buildDocument().toString();
   }
 }
+
+/// Representation of a WebDAV `Timeout` preference as defined in RFC 4918 §10.7.
+class LockTimeout {
+  /// Header fragment to transmit, for example `Second-3600` or `Infinite`.
+  final String headerValue;
+
+  const LockTimeout._(this.headerValue);
+
+  /// Request that the server chooses a timeout of exactly [seconds].
+  ///
+  /// RFC 4918 allows clients to provide a list of preferred durations that the
+  /// server may interpret; zero or negative values are rejected because they
+  /// have no well-defined meaning for the `Timeout` header.
+  factory LockTimeout.seconds(int seconds) {
+    if (seconds <= 0) {
+      throw ArgumentError.value(seconds, 'seconds', 'must be positive');
+    }
+    return LockTimeout._('Second-$seconds');
+  }
+
+  /// Request an infinite lock duration (`Timeout: Infinite`).
+  const LockTimeout.infinite() : headerValue = 'Infinite';
+
+  /// Provide a raw timeout token for extension headers.
+  factory LockTimeout.custom(String token) {
+    final normalized = token.trim();
+    if (normalized.isEmpty) {
+      throw ArgumentError('Timeout token cannot be empty');
+    }
+    return LockTimeout._(normalized);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is LockTimeout && headerValue == other.headerValue;
+
+  @override
+  int get hashCode => headerValue.hashCode;
+
+  @override
+  String toString() => 'LockTimeout($headerValue)';
+}

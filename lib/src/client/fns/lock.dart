@@ -6,12 +6,14 @@ extension WebdavClientLock on WebdavClient {
   /// - [path] of the resource
   /// - [exclusive] If true, the lock is exclusive; if false, the lock is shared
   /// - [timeout] of the lock in seconds
+  /// - [timeoutPreferences] optional list of Timeout header preferences per RFC 4918 §10.7
   ///
   /// Returns the lock token
   Future<String> lock(
     String path, {
     bool exclusive = true,
     int timeout = 3600,
+    List<LockTimeout> timeoutPreferences = const <LockTimeout>[],
     String? owner,
     PropsDepth depth = PropsDepth.infinity,
     String? ifHeader,
@@ -46,6 +48,7 @@ extension WebdavClientLock on WebdavClient {
         null, // Empty body for lock refresh
         depth: depth,
         timeout: timeout,
+        timeoutPreferences: timeoutPreferences,
         cancelToken: cancelToken,
         ifHeader: ifHeader,
       );
@@ -89,6 +92,7 @@ extension WebdavClientLock on WebdavClient {
       xmlString,
       depth: depth,
       timeout: timeout,
+      timeoutPreferences: timeoutPreferences,
       cancelToken: cancelToken,
       ifHeader: ifHeader,
     );
