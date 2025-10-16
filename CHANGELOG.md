@@ -10,6 +10,7 @@
 - Added `WebdavClient.propFindRaw` to expose per-property status codes similar to SabreDAV’s propFind helpers.
 - Enriched `MultiStatusResponse` with DAV error metadata (`<d:error>`, `<d:responsedescription>`, `<d:location>`).
 - Preserved custom property XML in `WebdavFile` so empty or structured values survive PROPFIND parsing.
+- Treated all 2xx PROPFIND propstat statuses as success when parsing `WebdavFile`, avoiding dropped entries from compliant servers.
 
 ### [1.0.0]
 - Initial release of the project.

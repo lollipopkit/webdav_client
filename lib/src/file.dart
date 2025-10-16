@@ -185,9 +185,14 @@ class WebdavFile {
 
 /// Find the first successful propstat element
 XmlElement? _findSuccessfulPropstat(XmlElement response) {
-  for (var propstat in findElements(response, 'propstat')) {
-    final status = getElementText(propstat, 'status');
-    if (status != null && status.contains('200')) {
+  for (final propstat in findElements(response, 'propstat')) {
+    final statusText = getElementText(propstat, 'status');
+    if (statusText == null) {
+      continue;
+    }
+
+    final statusCode = _extractStatusCode(statusText);
+    if (statusCode != null && statusCode >= 200 && statusCode < 300) {
       return propstat;
     }
   }
@@ -199,6 +204,14 @@ bool _isDirectory(XmlElement prop) {
   final resourceTypes = findElements(prop, 'resourcetype');
   return resourceTypes.isNotEmpty &&
       hasElement(resourceTypes.first, 'collection');
+}
+
+int? _extractStatusCode(String statusText) {
+  final match = RegExp(r'(\d{3})').firstMatch(statusText);
+  if (match == null) {
+    return null;
+  }
+  return int.tryParse(match.group(1)!);
 }
 
 /// Parse HTTP date format to DateTime

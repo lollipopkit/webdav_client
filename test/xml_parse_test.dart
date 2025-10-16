@@ -16,6 +16,11 @@ void main() {
     expect(first.modified, DateTime(2025, 3, 16, 1, 37, 28));
   });
 
+  test('propfind accepts other successful propstat codes', () {
+    final files = WebdavFile.parseFiles('/', _propFind204);
+    expect(files.single.name, 'no-content.txt');
+  });
+
   test('custom properties preserve nested and empty values', () {
     final files = WebdavFile.parseFiles('/', _customPropFindRaw);
     final entry = files.single;
@@ -51,6 +56,21 @@ const _propFindRaw = '''
 </D:propstat>
 </D:response>
 </D:multistatus>
+''';
+
+const _propFind204 = '''
+<?xml version="1.0" encoding="utf-8"?>
+<d:multistatus xmlns:d="DAV:">
+  <d:response>
+    <d:href>/test%20dir/no-content.txt</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:displayname>no-content.txt</d:displayname>
+      </d:prop>
+      <d:status>HTTP/1.1 204 No Content</d:status>
+    </d:propstat>
+  </d:response>
+</d:multistatus>
 ''';
 
 const _customPropFindRaw = '''
