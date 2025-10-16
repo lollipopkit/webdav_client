@@ -15,7 +15,9 @@ void main() {
       );
     });
 
-    test('treats leading slash paths as relative to base collection', () {
+    test(
+        'treats leading slash paths as server-root references per RFC 4918 §8.3',
+        () {
       final resolved = resolveAgainstBaseUrl(
         base,
         '/shared/notes.txt',
@@ -23,7 +25,7 @@ void main() {
       expect(
         resolved,
         equals(
-          'https://example.com/remote.php/dav/files/alice/shared/notes.txt',
+          'https://example.com/shared/notes.txt',
         ),
       );
     });
@@ -60,9 +62,14 @@ void main() {
       expect(
         resolved,
         equals(
-          'https://example.com/remote.php/dav/files/alice/file.txt?download=1',
+          'https://example.com/file.txt?download=1',
         ),
       );
+    });
+
+    test('resolves "/" to the WebDAV server root', () {
+      final resolved = resolveAgainstBaseUrl(base, '/');
+      expect(resolved, equals('https://example.com/'));
     });
 
     test('normalizes dot segments while preserving base prefix', () {

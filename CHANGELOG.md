@@ -3,6 +3,7 @@
 ### Unreleased
 - Removed redundant OPTIONS preflights before GET/PUT operations to reduce latency and follow RFC 4918 guidance.
 - Normalized `resolveAgainstBaseUrl` output to strip dot-segments per RFC 4918 §8.3, avoiding malformed Destination headers.
+- Treated leading-slash references as server-root URLs in `resolveAgainstBaseUrl`, aligning Destination/If header construction with RFC 4918 §8.3.
 - Surfaced per-member diagnostics for DELETE 207 Multi-Status responses to match SabreDAV behaviour.
 - Added `WebdavClient.options()` to expose DAV capabilities without custom plumbing.
 - Added `WebdavClient.request()` so advanced WebDAV verbs (REPORT, SEARCH, etc.) reuse the built-in auth stack.

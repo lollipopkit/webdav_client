@@ -56,8 +56,10 @@ String joinPath(String path0, String path1) {
 ///
 /// - If [target] is already an absolute URL, it is returned as-is after
 ///   normalization.
-/// - Otherwise, [target] (including leading slash paths) is treated as
-///   relative to [baseUrl].
+/// - If [target] starts with '/', it is interpreted as a server-root reference,
+///   complying with RFC 4918 §8.3 expectations for absolute-path usage.
+/// - Otherwise, [target] is treated as relative to [baseUrl] while preserving
+///   the base collection prefix.
 String resolveAgainstBaseUrl(String baseUrl, String target) {
   final trimmed = target.trim();
   if (trimmed.isEmpty) {
@@ -79,20 +81,17 @@ String resolveAgainstBaseUrl(String baseUrl, String target) {
     return Uri.parse('$scheme:$trimmed').toString();
   }
 
+  // RFC 4918 §8.3 limits relative references to absolute paths that share the
+  // request prefix. Honour this by treating leading-slash targets as
+  // server-root references instead of appending the active collection path.
   final targetUri = Uri.parse(trimmed);
   final baseSegments = _withoutTrailingEmpty(baseUri.pathSegments);
   final targetSegments = _withoutTrailingEmpty(targetUri.pathSegments);
 
   final combinedSegments = <String>[];
-  if (trimmed.startsWith('/')) {
-    if (_segmentsHavePrefix(targetSegments, baseSegments) &&
-        targetSegments.isNotEmpty) {
-      combinedSegments.addAll(targetSegments);
-    } else {
-      combinedSegments
-        ..addAll(baseSegments)
-        ..addAll(targetSegments);
-    }
+  final absolutePath = trimmed.startsWith('/');
+  if (absolutePath) {
+    combinedSegments.addAll(targetSegments);
   } else {
     combinedSegments
       ..addAll(baseSegments)
@@ -102,10 +101,8 @@ String resolveAgainstBaseUrl(String baseUrl, String target) {
   final normalizedSegments = _removeDotSegments(combinedSegments);
 
   final pathBuffer = StringBuffer();
-  if (normalizedSegments.isEmpty) {
-    pathBuffer.write('/');
-  } else {
-    pathBuffer.write('/');
+  pathBuffer.write('/');
+  if (normalizedSegments.isNotEmpty) {
     pathBuffer.writeAll(normalizedSegments, '/');
     if (trimmed.endsWith('/')) {
       pathBuffer.write('/');
@@ -119,21 +116,6 @@ String resolveAgainstBaseUrl(String baseUrl, String target) {
   );
 
   return resolved.toString();
-}
-
-bool _segmentsHavePrefix(List<String> segments, List<String> prefix) {
-  if (prefix.isEmpty) {
-    return true;
-  }
-  if (segments.length < prefix.length) {
-    return false;
-  }
-  for (var i = 0; i < prefix.length; i++) {
-    if (segments[i] != prefix[i]) {
-      return false;
-    }
-  }
-  return true;
 }
 
 List<String> _withoutTrailingEmpty(List<String> segments) {

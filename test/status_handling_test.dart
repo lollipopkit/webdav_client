@@ -83,7 +83,7 @@ void main() {
 
     final response = await client.request<String>(
       'REPORT',
-      target: '/reports/activity',
+      target: 'reports/activity',
       headers: {'Depth': '1'},
       data: '<request/>',
       configure: (options) => options.responseType = ResponseType.plain,
@@ -93,6 +93,39 @@ void main() {
     expect(capturedPath, '/remote.php/dav/files/alice/reports/activity');
     expect(capturedDepth, '1');
     expect(capturedBody, '<request/>');
+  });
+
+  test('request helper routes leading slash targets to the server root',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+
+    String? capturedPath;
+
+    server.listen((request) async {
+      capturedPath = request.uri.path;
+      await request.drain();
+      request.response
+        ..statusCode = HttpStatus.ok
+        ..headers.contentType = ContentType('text', 'plain')
+        ..write('ok');
+      await request.response.close();
+    });
+
+    final client = WebdavClient.noAuth(
+      url: 'http://${server.address.host}:${server.port}/remote.php/dav/files/alice',
+    );
+
+    final response = await client.request<String>(
+      'REPORT',
+      target: '/reports/activity',
+      headers: {'Depth': '1'},
+      data: '<request/>',
+      configure: (options) => options.responseType = ResponseType.plain,
+    );
+
+    expect(response.data, 'ok');
+    expect(capturedPath, '/reports/activity');
   });
 
   test('request helper normalizes dot-segments when resolving relative targets',
