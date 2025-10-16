@@ -310,36 +310,32 @@ class WebdavClient {
       );
     }
 
-    final responses = parseMultiStatus(str);
-    final result = <String, Map<int, Map<String, XmlElement>>>{};
+    final rawMap = parseMultiStatusToMap(str);
+    if (rawMap.isEmpty) {
+      return const {};
+    }
 
-    for (final response in responses) {
-      final key = response.href.isNotEmpty ? response.href : path;
-      final statusMap = result.putIfAbsent(key, () => <int, Map<String, XmlElement>>{});
+    final normalized =
+        <String, Map<int, Map<String, XmlElement>>>{};
+    rawMap.forEach((href, statuses) {
+      final key = href.isNotEmpty ? href : path;
+      final statusMap =
+          normalized.putIfAbsent(key, () => <int, Map<String, XmlElement>>{});
 
-      for (final propstat in response.propstats) {
-        final statusCode = propstat.statusCode;
-        if (statusCode == null) {
-          continue;
-        }
+      statuses.forEach((statusCode, properties) {
         statusMap.update(
           statusCode,
           (existing) {
             final merged = Map<String, XmlElement>.from(existing);
-            merged.addAll(propstat.properties);
+            merged.addAll(properties);
             return merged;
           },
-          ifAbsent: () => propstat.properties,
+          ifAbsent: () => Map<String, XmlElement>.from(properties),
         );
-      }
+      });
+    });
 
-      final overallStatus = response.statusCode;
-      if (overallStatus != null && !statusMap.containsKey(overallStatus)) {
-        statusMap[overallStatus] = const <String, XmlElement>{};
-      }
-    }
-
-    return result;
+    return normalized;
   }
 
   /// Create a folder
@@ -1089,6 +1085,44 @@ List<MultiStatusResponse> parseMultiStatus(String xmlString) {
   }
 
   return responses;
+}
+
+/// Parse a Multi-Status response into a map keyed by decoded href, mirroring
+/// SabreDAV's `Client::parseMultiStatus`.
+Map<String, Map<int, Map<String, XmlElement>>> parseMultiStatusToMap(
+  String xmlString,
+) {
+  final responses = parseMultiStatus(xmlString);
+  final result = <String, Map<int, Map<String, XmlElement>>>{};
+
+  for (final response in responses) {
+    final hrefKey = response.href;
+    final statusMap =
+        result.putIfAbsent(hrefKey, () => <int, Map<String, XmlElement>>{});
+
+    final overallStatus = response.statusCode;
+    if (overallStatus != null) {
+      statusMap.putIfAbsent(overallStatus, () => <String, XmlElement>{});
+    }
+
+    for (final propstat in response.propstats) {
+      final statusCode = propstat.statusCode;
+      if (statusCode == null) continue;
+
+      final propertiesCopy = Map<String, XmlElement>.from(propstat.properties);
+      statusMap.update(
+        statusCode,
+        (existing) {
+          final merged = Map<String, XmlElement>.from(existing);
+          merged.addAll(propertiesCopy);
+          return merged;
+        },
+        ifAbsent: () => propertiesCopy,
+      );
+    }
+  }
+
+  return result;
 }
 
 String _decodeHref(String value) {

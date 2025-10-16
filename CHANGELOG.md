@@ -11,6 +11,7 @@
 - Enriched `MultiStatusResponse` with DAV error metadata (`<d:error>`, `<d:responsedescription>`, `<d:location>`).
 - Preserved custom property XML in `WebdavFile` so empty or structured values survive PROPFIND parsing.
 - Treated all 2xx PROPFIND propstat statuses as success when parsing `WebdavFile`, avoiding dropped entries from compliant servers.
+- Reused `parseMultiStatusToMap` inside `propFindRaw` and exposed top-level Multi-Status codes for SabreDAV parity.
 
 ### [1.0.0]
 - Initial release of the project.
