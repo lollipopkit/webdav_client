@@ -128,6 +128,37 @@ void main() {
     expect(capturedPath, '/remote.php/dav/files/alice/reports/activity');
   });
 
+  test('request helper avoids duplicating base prefix when target mismatches',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+
+    String? capturedPath;
+
+    server.listen((request) async {
+      capturedPath = request.uri.path;
+      await request.drain();
+      request.response
+        ..statusCode = HttpStatus.ok
+        ..headers.contentType = ContentType('text', 'plain')
+        ..write('ok');
+      await request.response.close();
+    });
+
+    final client = WebdavClient.noAuth(
+      url: 'http://${server.address.host}:${server.port}/remote.php/dav/files/alice',
+    );
+
+    final response = await client.request<String>(
+      'GET',
+      target: '/remote.php/dav/files/bob/report.txt',
+      configure: (options) => options.responseType = ResponseType.plain,
+    );
+
+    expect(response.data, 'ok');
+    expect(capturedPath, '/remote.php/dav/files/bob/report.txt');
+  });
+
   test('request helper allows root-leading slash when base has no path',
       () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);

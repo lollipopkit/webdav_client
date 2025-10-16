@@ -75,6 +75,17 @@ void main() {
       );
     });
 
+    test('falls back to provided absolute path when prefix mismatches', () {
+      final resolved = resolveAgainstBaseUrl(
+        base,
+        '/remote.php/dav/files/bob/doc.txt',
+      );
+      expect(
+        resolved,
+        equals('https://example.com/remote.php/dav/files/bob/doc.txt'),
+      );
+    });
+
     test('normalizes dot segments while preserving base prefix', () {
       final resolved = resolveAgainstBaseUrl(
         base,

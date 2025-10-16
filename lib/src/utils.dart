@@ -88,13 +88,21 @@ String resolveAgainstBaseUrl(String baseUrl, String target) {
 
   final combinedSegments = <String>[];
   if (trimmed.startsWith('/')) {
-    if (_segmentsHavePrefix(targetSegments, baseSegments) &&
-        targetSegments.isNotEmpty) {
+    final matchesPrefix = _segmentsHavePrefix(targetSegments, baseSegments);
+    if (matchesPrefix && targetSegments.isNotEmpty) {
       combinedSegments.addAll(targetSegments);
-    } else {
+    } else if (targetSegments.isEmpty) {
+      combinedSegments.addAll(baseSegments);
+    } else if (baseSegments.isNotEmpty &&
+        targetSegments.isNotEmpty &&
+        targetSegments.first != baseSegments.first) {
       combinedSegments
         ..addAll(baseSegments)
         ..addAll(targetSegments);
+    } else {
+      // Spec-violating servers may emit absolute paths outside the request
+      // prefix; honour the provided path instead of duplicating the base.
+      combinedSegments.addAll(targetSegments);
     }
   } else {
     combinedSegments
