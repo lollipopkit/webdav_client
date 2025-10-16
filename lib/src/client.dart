@@ -851,7 +851,11 @@ class WebdavClient {
 
     // Construct the If header
     if (lockToken != null || etag != null) {
-      requestHeaders['If'] = _buildIfHeader(url, path, lockToken, etag, notTag);
+      final ifHeader =
+          _buildIfHeader(url, path, lockToken, etag, notTag);
+      if (ifHeader.isNotEmpty) {
+        requestHeaders['If'] = ifHeader;
+      }
     }
 
     await _client.wdWriteWithBytes(
@@ -1265,35 +1269,37 @@ extension _Utils on WebdavClient {
     String? etag,
     bool notTag,
   ) {
-    if (lockToken == null && etag == null) return '';
+    if (lockToken == null && etag == null) {
+      return '';
+    }
 
-    final conditions = <String>[];
     final resourceTag = resolveAgainstBaseUrl(url, path);
 
-    // 确保资源标记是完整的 URL
-    final taggedList = StringBuffer('<$resourceTag>');
-
-    final resourceConditions = <String>[];
+    final conditionElements = <String>[];
     if (lockToken != null) {
       // 确保锁令牌格式正确
       final formattedLockToken =
           lockToken.startsWith('<') ? lockToken : '<$lockToken>';
-      resourceConditions
-          .add(notTag ? '(Not $formattedLockToken)' : '($formattedLockToken)');
+      conditionElements.add(
+        notTag ? 'Not $formattedLockToken' : formattedLockToken,
+      );
     }
 
     if (etag != null) {
       final formattedEtag = _formatEntityTag(etag);
-      resourceConditions
-          .add(notTag ? '(Not [$formattedEtag])' : '([$formattedEtag])');
+      conditionElements
+          .add(notTag ? 'Not [$formattedEtag]' : '[$formattedEtag]');
     }
 
-    if (resourceConditions.isNotEmpty) {
-      taggedList.write(' ${resourceConditions.join(' ')}');
-      conditions.add(taggedList.toString());
+    if (conditionElements.isEmpty) {
+      return '';
     }
 
-    return conditions.join(' ');
+    final buffer = StringBuffer('<$resourceTag> (');
+    buffer.write(conditionElements.join(' '));
+    buffer.write(')');
+
+    return buffer.toString();
   }
 
   String _formatEntityTag(String etag) {

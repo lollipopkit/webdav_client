@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:test/test.dart';
@@ -91,6 +92,42 @@ void main() {
     expect(capturedPath, '/remote.php/dav/files/alice/reports/activity');
     expect(capturedDepth, '1');
     expect(capturedBody, '<request/>');
+  });
+
+  test('conditionalPut combines lock token and etag within single list', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+
+    String? capturedIf;
+
+    server.listen((request) async {
+      if (request.method == 'PUT' && request.uri.path == '/resource.txt') {
+        capturedIf = request.headers.value('if');
+        await request.drain();
+        request.response.statusCode = HttpStatus.noContent;
+      } else {
+        request.response.statusCode = HttpStatus.notFound;
+      }
+      await request.response.close();
+    });
+
+    final baseUrl = 'http://${server.address.host}:${server.port}';
+    final client = WebdavClient.noAuth(url: baseUrl);
+
+    await client.conditionalPut(
+      '/resource.txt',
+      Uint8List.fromList([1, 2, 3]),
+      lockToken: 'opaquelocktoken:token123',
+      etag: 'etag-abc',
+    );
+
+    final expectedResource = '$baseUrl/resource.txt';
+    expect(
+      capturedIf,
+      equals(
+        '<$expectedResource> (<opaquelocktoken:token123> ["etag-abc"])',
+      ),
+    );
   });
 
   test('PROPFIND tolerates HTTP 200 responses', () async {

@@ -73,7 +73,12 @@ class WebdavFile {
     final xmlDocument = XmlDocument.parse(xmlStr);
     final responseElements = findAllElements(xmlDocument, 'response');
 
-    bool firstEntry = skipSelf;
+    final normalizedBaseHref = skipSelf
+        ? _normalizeHrefForComparison(
+            path,
+            treatAsCollection: path.trim().isEmpty || path.trim().endsWith('/'),
+          )
+        : null;
 
     for (final response in responseElements) {
       final href = getElementText(response, 'href');
@@ -87,17 +92,20 @@ class WebdavFile {
       final prop = findElements(propstat, 'prop').firstOrNull;
       if (prop == null) continue;
 
-      // Handle skipSelf logic for first entry
-      if (firstEntry) {
-        firstEntry = false;
-        final isFirstDir = _isDirectory(prop);
+      final decodedHref = _decodeHrefValue(href);
 
-        // Only skip if it's a directory, otherwise process as normal
-        if (isFirstDir && skipSelf) continue;
+      if (skipSelf && normalizedBaseHref != null) {
+        final normalizedHref = _normalizeHrefForComparison(
+          decodedHref,
+          treatAsCollection: normalizedBaseHref.endsWith('/'),
+        );
+        if (normalizedHref == normalizedBaseHref) {
+          continue;
+        }
       }
 
       // Create WebdavFile from prop data
-      final file = parse(path, href, prop);
+      final file = parse(path, decodedHref, prop);
       // print(file);
       files.add(file);
     }
@@ -131,7 +139,7 @@ class WebdavFile {
     final mTime = _parseHttpDate(mTimeStr);
 
     // Path and name
-    final decodedHref = Uri.decodeFull(href);
+    final decodedHref = _decodeHrefValue(href);
     var name = getElementText(prop, 'displayname');
 
     // If name is not found, extract from path
@@ -241,6 +249,68 @@ DateTime? _parseHttpDate(String? httpDate) {
   } catch (_) {
     return null;
   }
+}
+
+String _decodeHrefValue(String href) {
+  try {
+    return Uri.decodeFull(href);
+  } on FormatException {
+    return href;
+  }
+}
+
+String _normalizeHrefForComparison(
+  String href, {
+  required bool treatAsCollection,
+}) {
+  var value = href.trim();
+  if (value.isEmpty) {
+    return treatAsCollection ? '/' : '/';
+  }
+
+  Uri? parsed;
+  try {
+    parsed = Uri.parse(value);
+  } catch (_) {
+    parsed = null;
+  }
+
+  if (parsed != null) {
+    if (parsed.hasScheme || value.startsWith('/')) {
+      value = parsed.path;
+    } else if (parsed.path.isNotEmpty) {
+      value = parsed.path;
+    }
+  }
+
+  final queryIndex = value.indexOf('?');
+  if (queryIndex != -1) {
+    value = value.substring(0, queryIndex);
+  }
+
+  final fragmentIndex = value.indexOf('#');
+  if (fragmentIndex != -1) {
+    value = value.substring(0, fragmentIndex);
+  }
+
+  if (!value.startsWith('/')) {
+    value = '/$value';
+  }
+
+  value = value.replaceAll(RegExp(r'/+'), '/');
+  if (value.isEmpty) {
+    value = '/';
+  }
+
+  if (treatAsCollection) {
+    if (!value.endsWith('/')) {
+      value = '$value/';
+    }
+  } else if (value.length > 1 && value.endsWith('/')) {
+    value = value.substring(0, value.length - 1);
+  }
+
+  return value;
 }
 
 const _monthMap = {

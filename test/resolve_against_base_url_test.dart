@@ -77,5 +77,16 @@ void main() {
         ),
       );
     });
+
+    test('adopts network-path references with base scheme', () {
+      final resolved = resolveAgainstBaseUrl(
+        base,
+        '//cdn.example.org/assets/logo.png',
+      );
+      expect(
+        resolved,
+        equals('https://cdn.example.org/assets/logo.png'),
+      );
+    });
   });
 }

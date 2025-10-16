@@ -69,6 +69,16 @@ String resolveAgainstBaseUrl(String baseUrl, String target) {
   }
 
   final baseUri = Uri.parse(baseUrl);
+
+  if (trimmed.startsWith('//')) {
+    final scheme = baseUri.scheme;
+    if (scheme.isEmpty) {
+      // Fall back to the authority-style URI without modifying the scheme.
+      return Uri.parse(trimmed).toString();
+    }
+    return Uri.parse('$scheme:$trimmed').toString();
+  }
+
   final targetUri = Uri.parse(trimmed);
   final baseSegments = _withoutTrailingEmpty(baseUri.pathSegments);
   final targetSegments = _withoutTrailingEmpty(targetUri.pathSegments);

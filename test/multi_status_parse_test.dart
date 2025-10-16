@@ -88,4 +88,43 @@ void main() {
       expect(response.locationHref, '/locks/info');
     });
   });
+
+  group('parseMultiStatusToMap', () {
+    test('indexes properties by href and status code', () {
+      const xml = '''
+<?xml version="1.0" encoding="utf-8"?>
+<d:multistatus xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
+  <d:response>
+    <d:href>/doc.txt</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:getetag>"etag"</d:getetag>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+</d:multistatus>
+''';
+
+      final map = parseMultiStatusToMap(xml);
+      expect(map.keys, contains('/doc.txt'));
+      final props = map['/doc.txt']![200]!;
+      expect(props['{DAV:}getetag']?.innerText, '"etag"');
+    });
+
+    test('captures overall statuses without propstat blocks', () {
+      const xml = '''
+<?xml version="1.0" encoding="utf-8"?>
+<d:multistatus xmlns:d="DAV:">
+  <d:response>
+    <d:href>/deleted.txt</d:href>
+    <d:status>HTTP/1.1 404 Not Found</d:status>
+  </d:response>
+</d:multistatus>
+''';
+
+      final map = parseMultiStatusToMap(xml);
+      expect(map['/deleted.txt']![404], isEmpty);
+    });
+  });
 }

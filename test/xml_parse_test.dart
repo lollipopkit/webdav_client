@@ -25,17 +25,27 @@ void main() {
     final files = WebdavFile.parseFiles('/', _customPropFindRaw);
     final entry = files.single;
 
+    final metaValue = entry.customProps['http://example.com/custom:meta'];
     expect(
-      entry.customProps['http://example.com/custom:meta'],
-      equals('<custom:meta><custom:child>value</custom:child></custom:meta>'),
+      _normalizeXml(metaValue),
+      equals(_normalizeXml('<custom:meta><custom:child>value</custom:child></custom:meta>')),
     );
     expect(
       entry.customProps['http://example.com/custom:empty'],
       isEmpty,
     );
+    final labelValue = entry.customProps['http://example.com/custom:label'];
     expect(
-      entry.customProps['http://example.com/custom:label'],
-      equals('<custom:label xml:lang="en">Hello</custom:label>'),
+      _normalizeXml(labelValue),
+      equals(_normalizeXml('<custom:label xml:lang="en">Hello</custom:label>')),
+    );
+  });
+
+  test('parseFiles skips collection self entry regardless of response order', () {
+    final files = WebdavFile.parseFiles('/collection/', _collectionOutOfOrder);
+    expect(
+      files.map((file) => file.path).toList(),
+      equals(['/collection/item.txt']),
     );
   });
 }
@@ -91,3 +101,34 @@ const _customPropFindRaw = '''
   </d:response>
 </d:multistatus>
 ''';
+
+const _collectionOutOfOrder = '''
+<?xml version="1.0" encoding="utf-8"?>
+<d:multistatus xmlns:d="DAV:">
+  <d:response>
+    <d:href>/collection/item.txt</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:displayname>item.txt</d:displayname>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/collection/</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:resourcetype>
+          <d:collection/>
+        </d:resourcetype>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+</d:multistatus>
+''';
+
+String _normalizeXml(String? xml) {
+  if (xml == null) return '';
+  return xml.replaceAll(RegExp(r'>\s+<'), '><').trim();
+}
