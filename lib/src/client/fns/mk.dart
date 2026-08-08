@@ -50,10 +50,10 @@ extension WebdavClientMk on WebdavClient {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:mkcol', nest: () {
-      xmlBuilder.namespace('DAV:', 'd');
+      xmlBuilder.namespaceUri('d', 'DAV:');
       resolution.namespaces.forEach((prefix, uri) {
         if (prefix == 'd') return;
-        xmlBuilder.namespace(uri, prefix);
+        xmlBuilder.namespaceUri(prefix, uri);
       });
       xmlBuilder.element('d:set', nest: () {
         xmlBuilder.element('d:prop', nest: () {

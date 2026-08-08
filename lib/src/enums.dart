@@ -70,11 +70,11 @@ enum PropfindType {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:propfind', nest: () {
-      xmlBuilder.namespace('DAV:', 'd');
+      xmlBuilder.namespaceUri('d', 'DAV:');
 
       resolution.namespaces.forEach((prefix, uri) {
         if (prefix == 'd') return;
-        xmlBuilder.namespace(uri, prefix);
+        xmlBuilder.namespaceUri(prefix, uri);
       });
 
       xmlBuilder.element('d:prop', nest: () {
@@ -101,12 +101,12 @@ enum PropfindType {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:propfind', nest: () {
-      xmlBuilder.namespace('DAV:', 'd');
+      xmlBuilder.namespaceUri('d', 'DAV:');
       final resolution = includeResolution;
       if (resolution != null) {
         resolution.namespaces.forEach((prefix, uri) {
           if (prefix == 'd') return;
-          xmlBuilder.namespace(uri, prefix);
+          xmlBuilder.namespaceUri(prefix, uri);
         });
       }
       xmlBuilder.element('d:allprop');
@@ -125,7 +125,7 @@ enum PropfindType {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:propfind', nest: () {
-      xmlBuilder.namespace('DAV:', 'd');
+      xmlBuilder.namespaceUri('d', 'DAV:');
       xmlBuilder.element('d:propname');
     });
     return xmlBuilder.buildDocument().toString();

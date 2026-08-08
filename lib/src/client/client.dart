@@ -230,7 +230,7 @@ class WebdavClient {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:bind', nest: () {
-      xmlBuilder.namespace('DAV:', 'd');
+      xmlBuilder.namespaceUri('d', 'DAV:');
       xmlBuilder.element('d:segment', nest: segment);
       xmlBuilder.element('d:href', nest: href);
     });
@@ -253,7 +253,7 @@ class WebdavClient {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:unbind', nest: () {
-      xmlBuilder.namespace('DAV:', 'd');
+      xmlBuilder.namespaceUri('d', 'DAV:');
       xmlBuilder.element('d:segment', nest: segment);
     });
     return _xmlExtensionRequest(
@@ -277,7 +277,7 @@ class WebdavClient {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:rebind', nest: () {
-      xmlBuilder.namespace('DAV:', 'd');
+      xmlBuilder.namespaceUri('d', 'DAV:');
       xmlBuilder.element('d:segment', nest: segment);
       xmlBuilder.element('d:href', nest: href);
     });
@@ -357,7 +357,7 @@ class WebdavClient {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:sync-collection', nest: () {
-      xmlBuilder.namespace('DAV:', 'd');
+      xmlBuilder.namespaceUri('d', 'DAV:');
       xmlBuilder.element('d:sync-token', nest: syncToken ?? '');
       final syncLevel = depth == PropsDepth.infinity ? 'infinite' : depth.value;
       xmlBuilder.element('d:sync-level', nest: syncLevel);
@@ -372,7 +372,7 @@ class WebdavClient {
       );
       resolution.namespaces.forEach((prefix, uri) {
         if (prefix == 'd') return;
-        xmlBuilder.namespace(uri, prefix);
+        xmlBuilder.namespaceUri(prefix, uri);
       });
       xmlBuilder.element('d:prop', nest: () {
         for (final prop in resolution.properties) {
@@ -402,10 +402,10 @@ class WebdavClient {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:basicsearch', nest: () {
-      xmlBuilder.namespace('DAV:', 'd');
+      xmlBuilder.namespaceUri('d', 'DAV:');
       namespaces.forEach((prefix, uri) {
         if (prefix == 'd') return;
-        xmlBuilder.namespace(uri, prefix);
+        xmlBuilder.namespaceUri(prefix, uri);
       });
       xmlBuilder.xml(query);
     });
@@ -457,7 +457,7 @@ class WebdavClient {
     }
 
     return supported
-        .findAllElements('report', namespace: '*')
+        .findAllElements('report', namespaceUri: '*')
         .expand((report) => report.childElements)
         .map(_formatPropertyName)
         .toList(growable: false);
@@ -568,10 +568,10 @@ class WebdavClient {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:$reportName', nest: () {
-      xmlBuilder.namespace('DAV:', 'd');
+      xmlBuilder.namespaceUri('d', 'DAV:');
       resolution.namespaces.forEach((prefix, uri) {
         if (prefix == 'd') return;
-        xmlBuilder.namespace(uri, prefix);
+        xmlBuilder.namespaceUri(prefix, uri);
       });
       xmlBuilder.element('d:prop', nest: () {
         for (final prop in resolution.properties) {
@@ -602,7 +602,7 @@ class WebdavClient {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:label', nest: () {
-      xmlBuilder.namespace('DAV:', 'd');
+      xmlBuilder.namespaceUri('d', 'DAV:');
       xmlBuilder.element('d:$action', nest: () {
         xmlBuilder.element('d:label-name', nest: labelName);
       });
@@ -663,7 +663,7 @@ class WebdavClient {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:mkworkspace', nest: () {
-      xmlBuilder.namespace('DAV:', 'd');
+      xmlBuilder.namespaceUri('d', 'DAV:');
       xmlBuilder.element('d:source', nest: () {
         xmlBuilder.element('d:href', nest: sourceHref);
       });
@@ -689,7 +689,7 @@ class WebdavClient {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:merge', nest: () {
-      xmlBuilder.namespace('DAV:', 'd');
+      xmlBuilder.namespaceUri('d', 'DAV:');
       xmlBuilder.element('d:source', nest: () {
         xmlBuilder.element('d:href', nest: sourceHref);
       });
@@ -721,7 +721,7 @@ class WebdavClient {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:expand-property', nest: () {
-      xmlBuilder.namespace('DAV:', 'd');
+      xmlBuilder.namespaceUri('d', 'DAV:');
       void writeProperty(ExpandProperty property) {
         final resolved = resolvePropertyNames(
           [property.name],
@@ -818,10 +818,10 @@ class WebdavClient {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:principal-match', nest: () {
-      xmlBuilder.namespace('DAV:', 'd');
+      xmlBuilder.namespaceUri('d', 'DAV:');
       namespaceDeclarations.forEach((prefix, uri) {
         if (prefix == 'd') return;
-        xmlBuilder.namespace(uri, prefix);
+        xmlBuilder.namespaceUri(prefix, uri);
       });
       if (self) {
         xmlBuilder.element('d:self');
@@ -875,10 +875,10 @@ class WebdavClient {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:principal-property-search', nest: () {
-      xmlBuilder.namespace('DAV:', 'd');
+      xmlBuilder.namespaceUri('d', 'DAV:');
       namespaceDeclarations.forEach((prefix, uri) {
         if (prefix == 'd') return;
-        xmlBuilder.namespace(uri, prefix);
+        xmlBuilder.namespaceUri(prefix, uri);
       });
       xmlBuilder.element('d:property-search', nest: () {
         xmlBuilder.element('d:prop', nest: () {
@@ -910,7 +910,7 @@ class WebdavClient {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:principal-search-property-set', nest: () {
-      xmlBuilder.namespace('DAV:', 'd');
+      xmlBuilder.namespaceUri('d', 'DAV:');
     });
     return report(
       path,

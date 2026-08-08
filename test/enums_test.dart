@@ -52,9 +52,9 @@ void main() {
       final xml = PropfindType.allprop.buildXmlStr([]);
       final doc = XmlDocument.parse(xml);
       final includes =
-          doc.findAllElements('include', namespace: '*').toList();
+          doc.findAllElements('include', namespaceUri: '*').toList();
       expect(includes, isEmpty);
-      final allprop = doc.findAllElements('allprop', namespace: '*');
+      final allprop = doc.findAllElements('allprop', namespaceUri: '*');
       expect(allprop, isNotEmpty);
     });
 
@@ -63,7 +63,7 @@ void main() {
           PropfindType.allprop.buildXmlStr(['getetag', 'displayname']);
       final doc = XmlDocument.parse(xml);
       final includes =
-          doc.findAllElements('include', namespace: '*').toList();
+          doc.findAllElements('include', namespaceUri: '*').toList();
       expect(includes, isNotEmpty);
       final include = includes.first;
       final children = include.childElements.toList();
@@ -82,7 +82,7 @@ void main() {
     test('propname builds correct XML', () {
       final xml = PropfindType.propname.buildXmlStr([]);
       final doc = XmlDocument.parse(xml);
-      final propname = doc.findAllElements('propname', namespace: '*');
+      final propname = doc.findAllElements('propname', namespaceUri: '*');
       expect(propname, isNotEmpty);
     });
 

@@ -88,7 +88,7 @@ extension WebdavClientLock on WebdavClient {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:lockinfo', nest: () {
-      xmlBuilder.namespace('DAV:', 'd');
+      xmlBuilder.namespaceUri('d', 'DAV:');
       xmlBuilder.element('d:lockscope', nest: () {
         xmlBuilder.element(exclusive ? 'd:exclusive' : 'd:shared');
       });
@@ -168,17 +168,17 @@ extension WebdavClientLock on WebdavClient {
     }
 
     return supported
-        .findElements('lockentry', namespace: '*')
+        .findElements('lockentry', namespaceUri: '*')
         .map((entry) {
           final scope = entry
-              .findElements('lockscope', namespace: '*')
+              .findElements('lockscope', namespaceUri: '*')
               .firstOrNull
               ?.childElements
               .firstOrNull
               ?.name
               .local;
           final type = entry
-              .findElements('locktype', namespace: '*')
+              .findElements('locktype', namespaceUri: '*')
               .firstOrNull
               ?.childElements
               .firstOrNull
@@ -211,7 +211,7 @@ extension WebdavClientLock on WebdavClient {
     }
 
     return discovery
-        .findElements('activelock', namespace: '*')
+        .findElements('activelock', namespaceUri: '*')
         .map(_parseActiveLock)
         .toList(growable: false);
   }
@@ -264,22 +264,22 @@ extension WebdavClientLock on WebdavClient {
 
 ActiveLock _parseActiveLock(XmlElement element) {
   String? firstChildName(String container) {
-    final containerElement = element.findElements(container, namespace: '*')
+    final containerElement = element.findElements(container, namespaceUri: '*')
         .firstOrNull;
     return containerElement?.childElements.firstOrNull?.name.local;
   }
 
   String? nestedText(String container, String child) {
-    final containerElement = element.findElements(container, namespace: '*')
+    final containerElement = element.findElements(container, namespaceUri: '*')
         .firstOrNull;
-    final childElement = containerElement?.findElements(child, namespace: '*')
+    final childElement = containerElement?.findElements(child, namespaceUri: '*')
         .firstOrNull;
     final text = childElement?.innerText.trim();
     return text == null || text.isEmpty ? null : text;
   }
 
   String? directText(String name) {
-    final text = element.findElements(name, namespace: '*')
+    final text = element.findElements(name, namespaceUri: '*')
         .firstOrNull
         ?.innerText
         .trim();

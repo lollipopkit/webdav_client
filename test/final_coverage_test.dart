@@ -223,7 +223,7 @@ void main() {
 
       await client.lock(
         '/file.txt',
-        timeoutPreferences: [LockTimeout.seconds(600), LockTimeout.infinite()],
+        timeoutPreferences: [LockTimeout.seconds(600), const LockTimeout.infinite()],
       );
 
       expect(capturedTimeout, 'Second-600, Infinite');

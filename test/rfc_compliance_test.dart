@@ -131,7 +131,7 @@ void main() {
         url: 'http://${server.address.host}:${server.port}',
       );
 
-      final xmlBody = '''<?xml version="1.0" encoding="utf-8"?>
+      const xmlBody = '''<?xml version="1.0" encoding="utf-8"?>
 <d:mkcol xmlns:d="DAV:">
   <d:set>
     <d:prop>

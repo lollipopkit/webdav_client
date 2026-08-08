@@ -34,9 +34,9 @@ void main() {
 
     expect(restrictions, isNotNull);
     expect(
-      restrictions!.findElements('required-principal', namespace: '*'),
+      restrictions!.findElements('required-principal', namespaceUri: '*'),
       isNotEmpty,
     );
-    expect(restrictions.findElements('no-invert', namespace: '*'), isNotEmpty);
+    expect(restrictions.findElements('no-invert', namespaceUri: '*'), isNotEmpty);
   });
 }

@@ -84,7 +84,7 @@ void main() {
       final response = responses.single;
       expect(response.error, isNotNull);
       expect(
-          response.error!.findElements('lock-token-submitted', namespace: '*'),
+          response.error!.findElements('lock-token-submitted', namespaceUri: '*'),
           isNotEmpty);
       expect(response.responseDescription, 'The resource is currently locked.');
       expect(response.locationHref, '/locks/info');
