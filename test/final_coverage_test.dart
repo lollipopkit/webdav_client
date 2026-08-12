@@ -51,11 +51,38 @@ void main() {
         url: 'http://${server.address.host}:${server.port}',
       );
 
+      // Caller-supplied headers must win over the generated default, and the
+      // match must be case-insensitive: pass a lowercase header name while
+      // the default is written as "Content-Type".
+      await client.write(
+        '/test.txt',
+        Uint8List.fromList([1, 2, 3]),
+        headers: {'content-type': 'text/plain; charset=utf-8'},
+      );
+      expect(capturedContentType, contains('text/plain'));
+    });
+
+    test('defaults to application/octet-stream without additionalHeaders',
+        () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() async => server.close(force: true));
+
+      String? capturedContentType;
+      server.listen((request) async {
+        capturedContentType = request.headers.contentType?.toString();
+        await request.drain();
+        request.response.statusCode = HttpStatus.created;
+        await request.response.close();
+      });
+
+      final client = WebdavClient.noAuth(
+        url: 'http://${server.address.host}:${server.port}',
+      );
+
       await client.write(
         '/test.txt',
         Uint8List.fromList([1, 2, 3]),
       );
-      // Default content type is application/octet-stream
       expect(capturedContentType, contains('octet-stream'));
     });
   });

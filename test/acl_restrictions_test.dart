@@ -33,10 +33,13 @@ void main() {
     final restrictions = await client.aclRestrictions(path: '/file.txt');
 
     expect(restrictions, isNotNull);
-    expect(
+expect(
       restrictions!.findElements('required-principal', namespaceUri: '*'),
       isNotEmpty,
     );
-    expect(restrictions.findElements('no-invert', namespaceUri: '*'), isNotEmpty);
+    expect(
+      restrictions.findElements('no-invert', namespaceUri: '*'),
+      isNotEmpty,
+    );
   });
 }

@@ -1,5 +1,7 @@
 const _defaultDavNamespace = 'DAV:';
-final RegExp _clarkNotationPattern = RegExp(r'^\{([^}]+)\}(.+)$');
+final RegExp _clarkNotationPattern = RegExp(r'^\{([^}]*)\}(.+)$');
+final RegExp _xmlNamePattern = RegExp(r'^[A-Za-z_][A-Za-z0-9._\-]*$');
+const _reservedPrefixes = <String>{'d', 'D'};
 
 /// Result of resolving a property name into its XML qualified representation.
 class ResolvedPropertyName {
@@ -38,6 +40,11 @@ class PropertyResolutionResult {
 }
 
 /// Resolve property identifiers supplied either in prefix or Clark notation.
+///
+/// The `d` (and `D`) prefixes are reserved for the DAV: namespace and cannot
+/// be rebound by [namespaceMap]; attempting to do so throws an [ArgumentError]
+/// so that generated XML always declares `xmlns:d="DAV:"` consistently with
+/// the resolved property names.
 PropertyResolutionResult resolvePropertyNames(
   Iterable<String> propertyNames, {
   Map<String, String> namespaceMap = const <String, String>{},
@@ -49,6 +56,13 @@ PropertyResolutionResult resolvePropertyNames(
 
   for (final entry in namespaceMap.entries) {
     if (entry.key.isEmpty || entry.value.isEmpty) continue;
+    if (_reservedPrefixes.contains(entry.key) &&
+        entry.value != _defaultDavNamespace) {
+      throw ArgumentError(
+        'The namespace prefix "${entry.key}" is reserved for the DAV: '
+        'namespace and cannot be rebound.',
+      );
+    }
     mergedNamespaces[entry.key] = entry.value;
   }
 
@@ -85,24 +99,43 @@ PropertyResolutionResult resolvePropertyNames(
 
     final clarkMatch = _clarkNotationPattern.firstMatch(property);
     if (clarkMatch != null) {
-      final namespaceUri = clarkMatch.group(1)!.trim();
-      final localName = clarkMatch.group(2)!.trim();
-
-      String? prefix;
-      for (final entry in mergedNamespaces.entries) {
-        if (entry.value == namespaceUri) {
-          prefix = entry.key;
-          break;
+      final rawUri = clarkMatch.group(1)!;
+      if (rawUri.isEmpty) {
+        // An explicitly empty namespace `{}name` is not a well-formed Clark
+        // name; fall through to the default-prefix handling as before.
+        resolvedName = ResolvedPropertyName(
+          qualifiedName: 'd:$property',
+          prefix: 'd',
+          namespaceUri: mergedNamespaces['d'] ?? _defaultDavNamespace,
+          localName: property,
+        );
+      } else {
+        final namespaceUri = rawUri.trim();
+        if (namespaceUri.isEmpty) {
+          throw ArgumentError(
+            'Property name "$property" is not a valid Clark notation name: '
+            'the namespace URI must not be empty.',
+          );
         }
-      }
-      prefix ??= obtainAutoPrefix(namespaceUri);
+        final localName = clarkMatch.group(2)!.trim();
+        _validateXmlName(localName, property);
 
-      resolvedName = ResolvedPropertyName(
-        qualifiedName: '$prefix:$localName',
-        prefix: prefix,
-        namespaceUri: namespaceUri,
-        localName: localName,
-      );
+        String? prefix;
+        for (final entry in mergedNamespaces.entries) {
+          if (entry.value == namespaceUri) {
+            prefix = entry.key;
+            break;
+          }
+        }
+        prefix ??= obtainAutoPrefix(namespaceUri);
+
+        resolvedName = ResolvedPropertyName(
+          qualifiedName: '$prefix:$localName',
+          prefix: prefix,
+          namespaceUri: namespaceUri,
+          localName: localName,
+        );
+      }
     } else if (property.contains(':')) {
       final separatorIndex = property.indexOf(':');
       final prefix = property.substring(0, separatorIndex);
@@ -110,6 +143,8 @@ PropertyResolutionResult resolvePropertyNames(
       if (localName.isEmpty) {
         throw ArgumentError('Property name "$property" is not valid');
       }
+      _validateXmlName(prefix, property);
+      _validateXmlName(localName, property);
       final namespaceUri = mergedNamespaces[prefix];
       if (namespaceUri == null) {
         throw ArgumentError(
@@ -125,6 +160,7 @@ PropertyResolutionResult resolvePropertyNames(
         localName: localName,
       );
     } else {
+      _validateXmlName(property, property);
       const prefix = 'd';
       final namespaceUri = mergedNamespaces[prefix] ?? _defaultDavNamespace;
 
@@ -144,4 +180,15 @@ PropertyResolutionResult resolvePropertyNames(
     properties: resolved,
     namespaces: requiredNamespaces,
   );
+}
+
+/// Validate that [name] is a legal XML NCName before it is interpolated into
+/// a generated qualified element name.
+void _validateXmlName(String name, String property) {
+  if (!_xmlNamePattern.hasMatch(name)) {
+    throw ArgumentError(
+      'Property name "$property" contains an invalid XML name part '
+      '"$name". Only XML Names are supported.',
+    );
+  }
 }

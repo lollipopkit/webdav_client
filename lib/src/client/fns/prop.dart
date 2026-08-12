@@ -144,7 +144,7 @@ extension WebdavClientPropfind on WebdavClient {
     if (lockToken != null || etag != null) {
       final ifHeader = _buildIfHeader(url, path, lockToken, etag, notTag);
       if (ifHeader.isNotEmpty) {
-        requestHeaders['If'] = ifHeader;
+        _setHeaderCaseInsensitive(requestHeaders, 'If', ifHeader);
       }
     }
 
@@ -171,7 +171,7 @@ extension WebdavClientPropfind on WebdavClient {
     final requestHeaders = headers != null
         ? Map<String, dynamic>.from(headers)
         : <String, dynamic>{};
-    requestHeaders['If-None-Match'] = '*';
+    _setHeaderCaseInsensitive(requestHeaders, 'If-None-Match', '*');
 
     return _client.wdWriteWithBytes(
       path,
@@ -194,7 +194,11 @@ extension WebdavClientPropfind on WebdavClient {
     final requestHeaders = headers != null
         ? Map<String, dynamic>.from(headers)
         : <String, dynamic>{};
-    requestHeaders['If-Match'] = _formatEntityTag(etag);
+    _setHeaderCaseInsensitive(
+      requestHeaders,
+      'If-Match',
+      _formatEntityTag(etag),
+    );
 
     return _client.wdWriteWithBytes(
       path,
@@ -224,25 +228,32 @@ extension WebdavClientPropfind on WebdavClient {
     xmlBuilder.element('d:propertyupdate', nest: () {
       xmlBuilder.namespaceUri('d', 'DAV:');
 
-      final setResolution = (setProps != null && setProps.isNotEmpty)
-          ? resolvePropertyNames(
-              setProps.keys,
-              namespaceMap: namespaces,
-            )
-          : null;
-      final removeResolution = (removeProps != null && removeProps.isNotEmpty)
-          ? resolvePropertyNames(
-              removeProps,
-              namespaceMap: namespaces,
-            )
-          : null;
+      // Resolve set and remove lists in a single pass so auto-assigned
+      // prefixes (ns0, ns1, ...) are allocated consistently across both
+      // lists; resolving them separately can map the same prefix to two
+      // different URIs in the generated PROPPATCH.
+      final setKeys = setProps?.keys.toList(growable: false) ?? const [];
+      final removeList = removeProps ?? const <String>[];
+      final combined = <String>[...setKeys, ...removeList];
+      final combinedResolution =
+          combined.isEmpty ? null : resolvePropertyNames(
+        combined,
+        namespaceMap: namespaces,
+      );
+      final setResolution = combinedResolution == null || setKeys.isEmpty
+          ? null
+          : _splitResolution(combinedResolution, 0, setKeys.length);
+      final removeResolution = combinedResolution == null || removeList.isEmpty
+          ? null
+          : _splitResolution(
+              combinedResolution,
+              setKeys.length,
+              setKeys.length + removeList.length,
+            );
 
       final namespaceDeclarations = <String, String>{};
-      if (setResolution != null) {
-        namespaceDeclarations.addAll(setResolution.namespaces);
-      }
-      if (removeResolution != null) {
-        namespaceDeclarations.addAll(removeResolution.namespaces);
+      if (combinedResolution != null) {
+        namespaceDeclarations.addAll(combinedResolution.namespaces);
       }
 
       namespaceDeclarations.forEach((prefix, uri) {
@@ -749,12 +760,36 @@ extension WebdavClientPropfind on WebdavClient {
     );
 
     final normalizedTarget = _normalizeHrefForPropFind(path);
-    Map<int, Map<String, XmlElement>>? statusMap = raw[path];
-    statusMap ??= raw[normalizedTarget];
-    statusMap ??= raw[_normalizeHrefForPropFind(normalizedTarget)];
+    // The request is resolved against the client's base URL before it is
+    // sent, so servers respond with collection-qualified hrefs (for example
+    // `/remote.php/dav/files/alice/file` for `path: '/file'`). Match both the
+    // caller-supplied path and the resolved server-side path.
+    final candidates = <String>{normalizedTarget};
+    try {
+      final baseUrl = url; // e.g. https://host/remote.php/dav/files/alice
+      final baseUri = Uri.parse(baseUrl);
+      final resolvedPath = Uri.parse(
+        resolveAgainstBaseUrl(baseUrl, path),
+      ).path;
+      if (baseUri.hasScheme && resolvedPath.isNotEmpty) {
+        candidates
+          ..add(_normalizeHrefForPropFind(resolvedPath))
+          ..add(_normalizeHrefForPropFind(baseUri.path + resolvedPath));
+      }
+    } on FormatException {
+      // Unparseable base URL: fall back to path-only matching below.
+    }
+
+    Map<int, Map<String, XmlElement>>? statusMap;
+    for (final candidate in candidates) {
+      statusMap = raw[candidate];
+      if (statusMap != null) break;
+      statusMap = raw[_normalizeHrefForPropFind(candidate)];
+      if (statusMap != null) break;
+    }
     statusMap ??= raw.entries
         .firstWhereOrNull(
-          (entry) => _normalizeHrefForPropFind(entry.key) == normalizedTarget,
+          (entry) => candidates.contains(_normalizeHrefForPropFind(entry.key)),
         )
         ?.value;
 
@@ -840,12 +875,16 @@ extension WebdavClientPropfind on WebdavClient {
     final result = <String, Map<String, XmlElement>>{};
     raw.forEach((href, statusMap) {
       final props = <String, XmlElement>{};
+      var hasSuccess = false;
       statusMap.forEach((status, statusProps) {
         if (status >= 200 && status < 300) {
+          hasSuccess = true;
           props.addAll(statusProps);
         }
       });
-      if (props.isNotEmpty) {
+      // Preserve every resource with a successful status, even when the
+      // server reports no properties for it.
+      if (hasSuccess) {
         result[href] = props;
       }
     });
@@ -884,6 +923,8 @@ extension WebdavClientPropfind on WebdavClient {
       throw WebdavException(
         message: 'No data returned',
         statusCode: resp.statusCode,
+        statusMessage: resp.statusMessage,
+        response: resp,
       );
     }
 
@@ -952,4 +993,30 @@ String _decodePropFindHref(String href) {
   } on FormatException {
     return href;
   }
+}
+
+/// Split a combined [PropertyResolutionResult] into a sub-range of the
+/// resolved properties, preserving their shared namespace declarations.
+PropertyResolutionResult _splitResolution(
+  PropertyResolutionResult resolution,
+  int start,
+  int end,
+) {
+  return PropertyResolutionResult(
+    properties: resolution.properties.sublist(start, end),
+    namespaces: resolution.namespaces,
+  );
+}
+
+/// Set [name] in [headers], removing any existing entry with the same name
+/// (case-insensitively) first so generated conditions never duplicate
+/// caller-supplied headers with a different casing.
+void _setHeaderCaseInsensitive(
+  Map<String, dynamic> headers,
+  String name,
+  dynamic value,
+) {
+  final lower = name.toLowerCase();
+  headers.removeWhere((key, _) => key.toLowerCase() == lower);
+  headers[name] = value;
 }

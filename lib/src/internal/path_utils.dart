@@ -37,7 +37,7 @@ String resolveAgainstBaseUrl(String baseUrl, String target) {
     return Uri.parse(baseUrl).toString();
   }
 
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+  if (_hasUriScheme(trimmed)) {
     return Uri.parse(trimmed).toString();
   }
 
@@ -65,6 +65,17 @@ String resolveAgainstBaseUrl(String baseUrl, String target) {
   if (qi != -1) {
     query = rawTarget.substring(qi + 1);
     rawTarget = rawTarget.substring(0, qi);
+  }
+
+  if (rawTarget.isEmpty) {
+    // Query-only (`?x=1`) and fragment-only (`#frag`) references must not
+    // change the base path (RFC 3986 §5.3).
+    return _replaceRawPath(
+      baseUri,
+      baseUri.path.isEmpty ? '/' : baseUri.path,
+      query: query,
+      fragment: fragment,
+    );
   }
 
   // Split raw path into segments preserving encoding.
@@ -119,12 +130,16 @@ String resolveAgainstBaseUrl(String baseUrl, String target) {
 
   // Check if first segments differ — append to base (SabreDAV behavior).
   if (baseSegments.isNotEmpty && (rawSegments.first != baseSegments.first)) {
-    // Prepend base segments and append target segments.
-    final combined = <String>[...baseSegments, ...rawSegments];
-    final path = '/${combined.join('/')}${rawTarget.endsWith('/') ? '/' : ''}';
+    // Prepend base segments and append target segments, then normalize dot
+    // segments across the combined path.
+    final combinedSegments = <String>[...baseSegments, ...rawSegments];
+    final normalizedCombined = _normalizeRawSegments(
+      combinedSegments,
+      preserveTrailingSlash: rawTarget.endsWith('/'),
+    );
     return _replaceRawPath(
       baseUri,
-      path,
+      normalizedCombined,
       query: query,
       fragment: fragment,
     );
@@ -137,6 +152,29 @@ String resolveAgainstBaseUrl(String baseUrl, String target) {
     query: query,
     fragment: fragment,
   );
+}
+
+/// Return `true` when [target] carries an explicit URI scheme
+/// (for example `http://`, `ftp://` or `webdavs://`), meaning the target is
+/// already absolute and must not be resolved against the base URL.
+bool _hasUriScheme(String target) {
+  final colonIndex = target.indexOf(':');
+  if (colonIndex <= 0) return false;
+  final scheme = target.substring(0, colonIndex);
+  if (scheme.isEmpty || target.startsWith('/')) return false;
+  for (var i = 0; i < scheme.length; i++) {
+    final code = scheme.codeUnitAt(i);
+    final isAlpha = (code >= 0x41 && code <= 0x5A) ||
+        (code >= 0x61 && code <= 0x7A);
+    final isDigit = code >= 0x30 && code <= 0x39;
+    final isPlus = code == 0x2B;
+    final isDot = code == 0x2E;
+    final isDash = code == 0x2D;
+    if (!(isAlpha || (i > 0 && (isDigit || isPlus || isDot || isDash)))) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /// Check if [segments] starts with [prefix] using raw (percent-encoded) comparison.

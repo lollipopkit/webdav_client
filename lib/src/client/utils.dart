@@ -56,12 +56,24 @@ class MultiStatusPropstat {
 
 /// Parse an RFC 4918 Multi-Status XML body into structured responses, closely
 /// following the behaviour of SabreDAV's `Client::parseMultiStatus`.
+///
+/// Only direct protocol children of each container are considered:
+/// `<response>` elements must be direct children of the `multistatus` root,
+/// and `<href>`/`<propstat>`/`<status>` lookups are scoped to the immediate
+/// children of their parent element so nested extension XML cannot be
+/// misread as protocol elements.
 List<MultiStatusResponse> parseMultiStatus(String xmlString) {
   final document = XmlDocument.parse(xmlString);
   final responses = <MultiStatusResponse>[];
 
-  for (final responseElement in findAllElements(document, 'response')) {
-    final href = getElementText(responseElement, 'href');
+  final responseElements = document.rootElement.childElements
+      .where((element) => element.name.local == 'response');
+
+  for (final responseElement in responseElements) {
+    final hrefElement = responseElement.childElements
+        .where((element) => element.name.local == 'href')
+        .firstOrNull;
+    final href = hrefElement?.innerText;
     final decodedHref =
         href != null && href.isNotEmpty ? _decodeHref(href) : '';
 
@@ -95,7 +107,9 @@ List<MultiStatusResponse> parseMultiStatus(String xmlString) {
 
     String? locationHref;
     if (locationElement != null) {
-      final hrefElement = findElements(locationElement, 'href').firstOrNull;
+      final hrefElement = locationElement.childElements
+          .where((element) => element.name.local == 'href')
+          .firstOrNull;
       if (hrefElement != null) {
         final hrefText = hrefElement.innerText;
         if (hrefText.isNotEmpty) {
@@ -105,13 +119,19 @@ List<MultiStatusResponse> parseMultiStatus(String xmlString) {
     }
 
     final propstats = <MultiStatusPropstat>[];
-    for (final propstatElement in findElements(responseElement, 'propstat')) {
-      final statusElement = findElements(propstatElement, 'status').firstOrNull;
+    final propstatElements = responseElement.childElements
+        .where((element) => element.name.local == 'propstat');
+    for (final propstatElement in propstatElements) {
+      final statusElement = propstatElement.childElements
+          .where((element) => element.name.local == 'status')
+          .firstOrNull;
       final statusText = statusElement?.innerText;
       final statusCode =
           statusText != null ? _parseStatusCode(statusText) : null;
 
-      final propElement = findElements(propstatElement, 'prop').firstOrNull;
+      final propElement = propstatElement.childElements
+          .where((element) => element.name.local == 'prop')
+          .firstOrNull;
       final properties = <String, XmlElement>{};
       if (propElement != null) {
         for (final prop in propElement.childElements) {
@@ -199,9 +219,24 @@ List<String> parsePropPatchFailureMessages(String xmlString) {
   final failures = <String>[];
 
   for (final response in responses) {
+    final error = response.error;
+    final errorSuffix =
+        error == null ? '' : '. ${_formatDavErrorElement(error)}';
+
+    final overallStatus = response.statusCode;
+    if (overallStatus != null && overallStatus >= 300) {
+      final statusText = response.rawStatus ?? 'HTTP status $overallStatus';
+      final description = response.responseDescription;
+      final descriptionSuffix = description == null ? '' : '. $description';
+      failures.add(
+        'Failed to update properties for ${response.href}: '
+        '$statusText$descriptionSuffix$errorSuffix',
+      );
+    }
+
     for (final propstat in response.propstats) {
       final status = propstat.statusCode;
-      if (status != null && status >= 400) {
+      if (status != null && status >= 300) {
         final propNames =
             propstat.properties.values.map(_formatPropertyName).toList();
         final statusText = propstat.rawStatus ?? 'HTTP status $status';
@@ -209,7 +244,7 @@ List<String> parsePropPatchFailureMessages(String xmlString) {
         final descriptionSuffix = description == null ? '' : '. $description';
         failures.add(
           'Failed to update properties for ${response.href}: '
-          '$statusText. Failed props: $propNames$descriptionSuffix',
+          '$statusText. Failed props: $propNames$descriptionSuffix$errorSuffix',
         );
       }
     }
@@ -223,19 +258,24 @@ List<String> parseMultiStatusFailureMessages(String xmlString) {
   final failures = <String>[];
 
   for (final response in responses) {
+    final error = response.error;
+    final errorSuffix =
+        error == null ? '' : '. ${_formatDavErrorElement(error)}';
+
     final status = response.statusCode;
-    if (status != null && status >= 400) {
+    if (status != null && status >= 300) {
       final statusText = response.rawStatus ?? 'HTTP status $status';
       final description = response.responseDescription;
       final descriptionSuffix = description == null ? '' : '. $description';
       failures.add(
-        'Failed to process ${response.href}: $statusText$descriptionSuffix',
+        'Failed to process ${response.href}: '
+        '$statusText$descriptionSuffix$errorSuffix',
       );
     }
 
     for (final propstat in response.propstats) {
       final statusCode = propstat.statusCode;
-      if (statusCode == null || statusCode < 400) {
+      if (statusCode == null || statusCode < 300) {
         continue;
       }
       final statusText = propstat.rawStatus ?? 'HTTP status $statusCode';
@@ -246,7 +286,7 @@ List<String> parseMultiStatusFailureMessages(String xmlString) {
       final descriptionSuffix = description == null ? '' : '. $description';
       failures.add(
         'Failed to process ${response.href}: '
-        '$statusText$propsSuffix$descriptionSuffix',
+        '$statusText$propsSuffix$descriptionSuffix$errorSuffix',
       );
     }
   }
@@ -271,7 +311,15 @@ String _formatPropertyName(XmlElement element) {
 extension _Utils on WebdavClient {
   // Extract the lock token from the response
   String _extractLockToken(String xmlString) {
-    final document = XmlDocument.parse(xmlString);
+    late final XmlDocument document;
+    try {
+      document = XmlDocument.parse(xmlString);
+    } on XmlException catch (error) {
+      throw WebdavException(
+        message: 'Unable to parse lock response: $error',
+        statusCode: 500,
+      );
+    }
 
     // First, try activelock/locktoken/href
     final activeLockElements =
@@ -281,8 +329,8 @@ extension _Utils on WebdavClient {
           activeLock.findElements('locktoken', namespaceUri: '*');
       for (final lockToken in lockTokenElements) {
         final href = lockToken.findElements('href', namespaceUri: '*').firstOrNull;
-        if (href != null && href.innerText.isNotEmpty) {
-          return href.innerText;
+        if (href != null && _isSupportedLockToken(href.innerText)) {
+          return href.innerText.trim();
         }
       }
     }
@@ -292,8 +340,8 @@ extension _Utils on WebdavClient {
         document.findAllElements('locktoken', namespaceUri: '*');
     for (final lockToken in lockTokenElements) {
       final href = lockToken.findElements('href', namespaceUri: '*').firstOrNull;
-      if (href != null && href.innerText.isNotEmpty) {
-        return href.innerText;
+      if (href != null && _isSupportedLockToken(href.innerText)) {
+        return href.innerText.trim();
       }
     }
 
@@ -302,7 +350,7 @@ extension _Utils on WebdavClient {
     for (final href in hrefElements) {
       final text = href.innerText;
       if (text.startsWith('urn:uuid:') || text.startsWith('opaquelocktoken:')) {
-        return text;
+        return text.trim();
       }
     }
 
@@ -324,7 +372,10 @@ extension _Utils on WebdavClient {
       }
     }
     final trimmed = headerValue.trim();
-    return trimmed.isEmpty ? null : trimmed;
+    if (trimmed.isEmpty || !_isSupportedLockToken(trimmed)) {
+      return null;
+    }
+    return trimmed;
   }
 
   String _formatLockTokenHeader(String lockToken) {
@@ -411,13 +462,35 @@ extension _Utils on WebdavClient {
   }
 
   String _fixCollectionPath(String path) {
-    if (!path.startsWith('/')) {
-      path = '/$path';
+    var pathOnly = path;
+    String? query;
+    String? fragment;
+    final fragmentIndex = path.indexOf('#');
+    if (fragmentIndex != -1) {
+      fragment = path.substring(fragmentIndex + 1);
+      pathOnly = path.substring(0, fragmentIndex);
     }
-    if (!path.endsWith('/')) {
-      return '$path/';
+    final queryIndex = pathOnly.indexOf('?');
+    if (queryIndex != -1) {
+      query = pathOnly.substring(queryIndex + 1);
+      pathOnly = pathOnly.substring(0, queryIndex);
     }
-    return path;
+
+    if (!pathOnly.startsWith('/')) {
+      pathOnly = '/$pathOnly';
+    }
+    if (!pathOnly.endsWith('/')) {
+      pathOnly = '$pathOnly/';
+    }
+
+    var result = pathOnly;
+    if (query != null) {
+      result = '$result?$query';
+    }
+    if (fragment != null) {
+      result = '$result#$fragment';
+    }
+    return result;
   }
 
   void _ensurePropPatchSuccess(Response<String> resp) {
@@ -443,11 +516,21 @@ extension _Utils on WebdavClient {
     }
 
     try {
+      final parsed = parseMultiStatus(xmlString);
       final failures = parsePropPatchFailureMessages(xmlString);
+      if (parsed.isEmpty) {
+        throw WebdavException(
+          message:
+              'PROPPATCH response did not report any result for the request',
+          statusCode: resp.statusCode,
+          statusMessage: resp.statusMessage,
+          response: resp,
+        );
+      }
       if (failures.isNotEmpty) {
         throw WebdavException(
           message: failures.join('; '),
-          statusCode: 422,
+          statusCode: resp.statusCode,
           statusMessage: resp.statusMessage,
           response: resp,
         );
@@ -463,8 +546,19 @@ extension _Utils on WebdavClient {
   }
 }
 
+/// Return `true` when [value] is a lock token in one of the URI schemes
+/// specified by RFC 4918 §6.4 (or a raw token wrapped in angle brackets).
+bool _isSupportedLockToken(String value) {
+  final trimmed = value.trim();
+  return trimmed.startsWith('urn:uuid:') ||
+      trimmed.startsWith('opaquelocktoken:') ||
+      (trimmed.startsWith('<') && trimmed.endsWith('>'));
+}
+
 int? _parseStatusCode(String statusText) {
-  final match = RegExp(r'\b(\d{3})\b').firstMatch(statusText);
+  final normalized = statusText.trim();
+  final match = RegExp(r'^HTTP/\d(?:\.\d)?\s+(\d{3})\b')
+      .firstMatch(normalized);
   if (match == null) return null;
   return int.tryParse(match.group(1)!);
 }

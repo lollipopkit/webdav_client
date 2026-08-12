@@ -160,8 +160,19 @@ void main() {
       final parts = DigestParts(header);
       final auth = DigestAuth(user: 'u', pwd: 'p', digestParts: parts);
       final result = auth.authorize('GET', '/');
+      final values = _parseDigestAuthorization(result);
+
+      String h(String value) =>
+          crypto.sha256.convert(utf8.encode(value)).toString();
+      final ha1 = h('u:r:p');
+      final ha2 = h('GET:/');
+      final expected = h(
+        '$ha1:n:${values['nc']}:${values['cnonce']}:auth:$ha2',
+      );
+
       expect(result, startsWith('Digest'));
-      expect(result, contains('algorithm=SHA-256'));
+      expect(values['algorithm'], 'SHA-256');
+      expect(values['response'], expected);
     });
 
     test('SHA-256-sess algorithm', () {
@@ -169,8 +180,19 @@ void main() {
       final parts = DigestParts(header);
       final auth = DigestAuth(user: 'u', pwd: 'p', digestParts: parts);
       final result = auth.authorize('GET', '/');
-      expect(result, startsWith('Digest'));
-      expect(result, contains('algorithm=SHA-256-sess'));
+      final values = _parseDigestAuthorization(result);
+
+      String h(String value) =>
+          crypto.sha256.convert(utf8.encode(value)).toString();
+      final baseHa1 = h('u:r:p');
+      final ha1 = h('$baseHa1:n:${values['cnonce']}');
+      final ha2 = h('GET:/');
+      final expected = h(
+        '$ha1:n:${values['nc']}:${values['cnonce']}:auth:$ha2',
+      );
+
+      expect(values['algorithm'], 'SHA-256-sess');
+      expect(values['response'], expected);
     });
 
     test('SHA-512 algorithm via _hashByAlgorithm', () {

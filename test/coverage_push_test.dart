@@ -84,9 +84,9 @@ void main() {
       expect(
         () => client.read('/no-location'),
         throwsA(isA<WebdavException>().having(
-          (e) => e.message,
-          'message',
-          contains('No location header'),
+          (e) => e.statusCode,
+          'statusCode',
+          301,
         )),
       );
     });

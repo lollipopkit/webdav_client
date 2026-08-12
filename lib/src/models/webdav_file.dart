@@ -93,12 +93,8 @@ class WebdavFile {
       final href = getElementText(response, 'href');
       if (href == null) continue;
 
-      // Find successful propstat element
-      final propstat = _findSuccessfulPropstat(response);
-      if (propstat == null) continue;
-
-      // Find and process prop element
-      final prop = findElements(propstat, 'prop').firstOrNull;
+      // Find successful propstat elements and merge their properties
+      final prop = _mergeSuccessfulProps(response);
       if (prop == null) continue;
 
       final decodedHref = _decodeHrefValue(href);
@@ -200,8 +196,15 @@ class WebdavFile {
   }
 }
 
-/// Find the first successful propstat element
-XmlElement? _findSuccessfulPropstat(XmlElement response) {
+/// Find the successful propstat element(s) for [response] and merge their
+/// `prop` children into a single element.
+///
+/// RFC 4918 does not limit servers to a single successful propstat per
+/// response; properties may be split across several 2xx blocks. All successful
+/// blocks are merged (later blocks override earlier ones for the same
+/// property) so no metadata is lost.
+XmlElement? _mergeSuccessfulProps(XmlElement response) {
+  final mergedProps = <String, XmlElement>{};
   for (final propstat in findElements(response, 'propstat')) {
     final statusText = getElementText(propstat, 'status');
     if (statusText == null) {
@@ -210,10 +213,28 @@ XmlElement? _findSuccessfulPropstat(XmlElement response) {
 
     final statusCode = _extractStatusCode(statusText);
     if (statusCode != null && statusCode >= 200 && statusCode < 300) {
-      return propstat;
+      final prop = findElements(propstat, 'prop').firstOrNull;
+      if (prop == null) {
+        continue;
+      }
+      for (final child in prop.childElements) {
+        final namespaceUri = child.name.namespaceUri ?? '';
+        final key = namespaceUri.isEmpty
+            ? child.name.local
+            : '{$namespaceUri}${child.name.local}';
+        mergedProps[key] = child;
+      }
     }
   }
-  return null;
+  if (mergedProps.isEmpty) {
+    return null;
+  }
+
+  final merged = XmlElement(const XmlName.parts('prop'));
+  for (final property in mergedProps.values) {
+    merged.children.add(property);
+  }
+  return merged;
 }
 
 /// Determine if resource is a directory

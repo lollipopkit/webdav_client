@@ -68,6 +68,9 @@ void main() {
       final include = includes.first;
       final children = include.childElements.toList();
       expect(children.length, 2);
+      // RFC 4918 §9.1: `include` must be nested inside `allprop`.
+      final allprop = doc.findAllElements('allprop', namespaceUri: '*').first;
+      expect(include.parentElement, allprop);
     });
 
     test('allprop with custom namespaces', () {

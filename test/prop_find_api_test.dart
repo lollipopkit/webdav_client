@@ -242,8 +242,9 @@ void main() {
         'getetag',
       ]);
 
-      expect(body, contains('<d:allprop/>'));
-      expect(body, contains('<d:include>'));
+      // RFC 4918: `include` must be nested inside `allprop`.
+      expect(body, contains('<d:allprop><d:include>'));
+      expect(body, contains('<d:getetag/></d:include></d:allprop>'));
       expect(props.keys, contains('{DAV:}getetag'));
     });
   });

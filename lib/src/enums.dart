@@ -109,14 +109,15 @@ enum PropfindType {
           xmlBuilder.namespaceUri(prefix, uri);
         });
       }
-      xmlBuilder.element('d:allprop');
-      if (resolution != null && resolution.properties.isNotEmpty) {
-        xmlBuilder.element('d:include', nest: () {
-          for (final prop in resolution.properties) {
-            xmlBuilder.element(prop.qualifiedName);
-          }
-        });
-      }
+      xmlBuilder.element('d:allprop', nest: () {
+        if (resolution != null && resolution.properties.isNotEmpty) {
+          xmlBuilder.element('d:include', nest: () {
+            for (final prop in resolution.properties) {
+              xmlBuilder.element(prop.qualifiedName);
+            }
+          });
+        }
+      });
     });
     return xmlBuilder.buildDocument().toString();
   }

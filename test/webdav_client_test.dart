@@ -178,7 +178,7 @@ void main() {
         );
       } catch (e) {
         if (e is WebdavException &&
-            (e.statusCode == 403 || e.statusCode == 422)) {
+            (e.statusCode == 403 || e.statusCode == 207)) {
           print(
               'Note: Server does not support WebDAV property modification (${e.statusCode})');
           return;

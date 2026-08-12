@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:io' as io;
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -12,7 +10,6 @@ import 'package:webdav_client_plus/src/enums.dart';
 import 'package:webdav_client_plus/src/internal/iterable_extensions.dart';
 import 'package:webdav_client_plus/src/internal/path_utils.dart';
 import 'package:webdav_client_plus/src/internal/property_resolution.dart';
-import 'package:webdav_client_plus/src/internal/xml_utils.dart';
 import 'package:webdav_client_plus/src/models/webdav_file.dart';
 import 'package:xml/xml.dart';
 
@@ -1041,12 +1038,33 @@ class WebdavClient {
       headers: headers,
     );
 
-    final str = resp.data as String;
-    final file = WebdavFile.parseFiles(path, str, skipSelf: false).firstOrNull;
+    final str = resp.data;
+    if (str == null || str.isEmpty) {
+      throw WebdavException(
+        message: 'No data returned',
+        statusCode: resp.statusCode,
+        statusMessage: resp.statusMessage,
+        response: resp,
+      );
+    }
+
+    WebdavFile? file;
+    try {
+      file = WebdavFile.parseFiles(path, str, skipSelf: false).firstOrNull;
+    } on XmlException catch (error) {
+      throw WebdavException(
+        message: 'Unable to parse quota response: $error',
+        statusCode: resp.statusCode,
+        statusMessage: resp.statusMessage,
+        response: resp,
+      );
+    }
     if (file == null) {
       throw WebdavException(
         message: 'Quota not found',
-        statusCode: 404,
+        statusCode: resp.statusCode,
+        statusMessage: resp.statusMessage,
+        response: resp,
       );
     }
 
@@ -1055,7 +1073,9 @@ class WebdavClient {
     if (quotaAvailable == null || quotaUsed == null) {
       throw WebdavException(
         message: 'Quota not found',
-        statusCode: 404,
+        statusCode: resp.statusCode,
+        statusMessage: resp.statusMessage,
+        response: resp,
       );
     }
 
@@ -1079,6 +1099,15 @@ class WebdavClient {
     String formatSize(int bytes) {
       final mb = bytes / 1024 / 1024;
       return '${mb.toStringAsFixed(2)}M';
+    }
+
+    // Servers advertise unlimited space with a negative sentinel; any other
+    // negative count is invalid server data.
+    if (quotaUsed < 0) {
+      throw WebdavException(
+        message: 'Invalid quota response: used bytes must not be negative',
+        statusCode: null,
+      );
     }
 
     if (quotaAvailable < 0) {

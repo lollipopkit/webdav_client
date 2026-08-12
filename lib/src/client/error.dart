@@ -23,14 +23,22 @@ class WebdavException<T extends Object?> implements Exception {
   String toString() {
     final status = statusCode ?? 'unknown';
     final reason = statusMessage ?? '';
-    return 'WebdavException: $message (Status: $status $reason):\n'
-        '${response?.data}';
+    final body = response?.data;
+    if (body is String && body.isNotEmpty) {
+      final preview = body.length <= 200 ? body : '${body.substring(0, 200)}...';
+      final previewFormatted = preview.replaceAll('\n', ' ');
+      return 'WebdavException: $message (Status: $status $reason):\n'
+          '$previewFormatted';
+    }
+    return 'WebdavException: $message (Status: $status $reason)';
   }
 
   /// Create a [WebdavException] by inspecting a raw dio [Response].
   ///
   /// WebDAV-specific status codes are mapped to descriptive messages to help
-  /// callers surface RFC 4918 guidance without re-parsing the payload.
+  /// callers surface RFC 4918 guidance without re-parsing the payload. An
+  /// explicitly supplied [message] is always preserved so callers keep their
+  /// operation-specific context.
   factory WebdavException.fromResponse(
     Response<T> response, [
     String? message,
@@ -49,12 +57,24 @@ class WebdavException<T extends Object?> implements Exception {
         try {
           final body = response.data;
           if (body is! String) {
-            errorMessage = 'Multi-Status response with errors';
+            errorMessage = message ?? 'Multi-Status response with errors';
             break;
           }
 
           final xmlDoc = XmlDocument.parse(body);
-          final errorElements = xmlDoc.findAllElements('error', namespaceUri: '*');
+          // Only DAV: `<error>` elements that are direct children of a
+          // `response` element are protocol errors; nested extension XML in
+          // property values must not be misclassified.
+          final errorElements = xmlDoc.rootElement.childElements
+              .where((element) => element.name.local == 'response')
+              .expand(
+                (responseElement) => responseElement.childElements.where(
+                  (element) =>
+                      element.name.local == 'error' &&
+                      element.name.namespaceUri == 'DAV:',
+                ),
+              )
+              .toList();
           if (errorElements.isNotEmpty) {
             // Check common WebDAV preconditions/postconditions codes
             for (final errorElement in errorElements) {
@@ -63,7 +83,8 @@ class WebdavException<T extends Object?> implements Exception {
                   .findElements('lock-token-submitted', namespaceUri: '*')
                   .isNotEmpty) {
                 return WebdavException(
-                  message: 'Resource is locked and requires a valid lock token',
+                  message: message ??
+                      'Resource is locked and requires a valid lock token',
                   statusCode: status,
                   statusMessage: statusMessage,
                   response: response,
@@ -73,7 +94,8 @@ class WebdavException<T extends Object?> implements Exception {
                   .findElements('no-conflicting-lock', namespaceUri: '*')
                   .isNotEmpty) {
                 return WebdavException(
-                  message: 'The resource has a conflicting lock',
+                  message: message ??
+                      'The resource has a conflicting lock',
                   statusCode: status,
                   statusMessage: statusMessage,
                   response: response,
@@ -81,63 +103,66 @@ class WebdavException<T extends Object?> implements Exception {
               }
             }
 
-            errorMessage = _formatDavErrorElement(errorElements.first);
+            errorMessage = message ?? _formatDavErrorElement(errorElements.first);
             break;
           }
 
           final failures = parseMultiStatusFailureMessages(body);
           if (failures.isNotEmpty) {
-            errorMessage = failures.join('; ');
+            errorMessage = message ?? failures.join('; ');
             break;
           }
         } catch (_) {
-          errorMessage = 'Multi-Status response with errors';
+          errorMessage = message ?? 'Multi-Status response with errors';
         }
         break;
       case 422:
         // Unprocessable Entity (RFC 4918 §11.2 / §16).
-        errorMessage = 'Unprocessable Entity: The server understands the '
-            'content type but was unable to process the contained instructions';
+        errorMessage = message ??
+            'Unprocessable Entity: The server understands the '
+                'content type but was unable to process the contained instructions';
         break;
       case 423:
         // Locked (RFC 4918 §11.3).
-        errorMessage = 'Resource is locked';
+        errorMessage = message ?? 'Resource is locked';
         break;
       case 424:
         // Failed Dependency (RFC 4918 §11.4).
-        errorMessage = 'Failed dependency: The method could not be performed '
-            'because the requested action depended on another action that failed';
+        errorMessage = message ??
+            'Failed dependency: The method could not be performed '
+                'because the requested action depended on another action that failed';
         break;
       case 507:
         // Insufficient Storage (RFC 4918 §11.5).
-        errorMessage = 'Insufficient storage';
+        errorMessage = message ?? 'Insufficient storage';
         break;
       case 508:
         // Loop Detected (RFC 5842 §7.2).
-        errorMessage =
+        errorMessage = message ??
             'Loop detected: The binding graph contains a cycle for this request';
         break;
       // Other common status codes
       case 401:
         // HTTP 401 (RFC 7235 §3.1) — authentication challenge.
-        errorMessage = 'Authentication required';
+        errorMessage = message ?? 'Authentication required';
         break;
       case 403:
         // HTTP 403 (RFC 7231 §6.5.3) — permissions issue.
-        errorMessage = 'Access forbidden';
+        errorMessage = message ?? 'Access forbidden';
         break;
       case 404:
         // HTTP 404 (RFC 7231 §6.5.4) — resource missing.
-        errorMessage = 'Resource not found';
+        errorMessage = message ?? 'Resource not found';
         break;
       case 409:
         // HTTP 409 (RFC 7231 §6.5.8) — conflict with current state.
-        errorMessage = 'Conflict: The request could not be completed due to a '
-            'conflict with the current state of the resource';
+        errorMessage = message ??
+            'Conflict: The request could not be completed due to a '
+                'conflict with the current state of the resource';
         break;
       case 412:
         // HTTP 412 (RFC 7232 §4.2) — conditional headers failed.
-        errorMessage =
+        errorMessage = message ??
             'Precondition failed: One of the conditions specified in the request header failed';
         break;
     }

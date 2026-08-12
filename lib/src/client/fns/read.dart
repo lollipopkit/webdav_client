@@ -37,6 +37,8 @@ extension WebdavClientRead on WebdavClient {
       throw WebdavException(
         message: 'No data returned',
         statusCode: resp.statusCode,
+        statusMessage: resp.statusMessage,
+        response: resp,
       );
     }
 
@@ -77,6 +79,8 @@ extension WebdavClientRead on WebdavClient {
       throw WebdavException(
         message: 'No data returned',
         statusCode: resp.statusCode,
+        statusMessage: resp.statusMessage,
+        response: resp,
       );
     }
 
@@ -124,33 +128,14 @@ extension WebdavClientRead on WebdavClient {
     );
 
     if (resp.statusCode != 200 && resp.statusCode != 206) {
+      // Consume the error body so the connection can be reused instead of
+      // leaving the stream subscription hanging.
+      await resp.data?.stream.drain<void>();
       throw _newResponseError(resp);
     }
     if (resp.data == null) {
       throw _newResponseError(resp, 'Response data is null');
     }
     return resp;
-  }
-
-  /// Read the bytes of a file with stream and write to a local file
-  ///
-  /// - [remotePath] of the file
-  /// - [localPath] of the local file
-  /// - [onProgress] callback for progress
-  /// - [cancelToken] for cancelling the request
-  Future<void> readFile(
-    String remotePath,
-    String localPath, {
-    Map<String, dynamic>? headers,
-    void Function(int count, int total)? onProgress,
-    CancelToken? cancelToken,
-  }) async {
-    await _client.wdReadWithStream(
-      remotePath,
-      localPath,
-      headers: headers,
-      onProgress: onProgress,
-      cancelToken: cancelToken,
-    );
   }
 }

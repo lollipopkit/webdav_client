@@ -48,28 +48,4 @@ extension WebdavClientWrite on WebdavClient {
       cancelToken: cancelToken,
     );
   }
-
-  /// Read local file stream and write to remote file
-  ///
-  /// - [localPath] of the local file
-  /// - [remotePath] of the remote file
-  /// - [onProgress] callback for progress
-  /// - [cancelToken] for cancelling the request
-  Future<void> writeFile(
-    String localPath,
-    String remotePath, {
-    Map<String, dynamic>? headers,
-    void Function(int count, int total)? onProgress,
-    CancelToken? cancelToken,
-  }) async {
-    var file = io.File(localPath);
-    return writeStream(
-      remotePath,
-      file.openRead(),
-      file.lengthSync(),
-      headers: headers,
-      onProgress: onProgress,
-      cancelToken: cancelToken,
-    );
-  }
 }
