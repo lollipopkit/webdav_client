@@ -1,6 +1,7 @@
 # Changelog
 
 ### Unreleased
+- Moved to `xml` 7. The `namespace` argument and `XmlBuilder.namespace` are deprecated there in favour of `namespaceUri`, whose builder form takes the prefix first — every call site is converted. Note the constraint is now `^7.0.1` rather than `^6.0.0`: `namespaceUri` does not exist in 6, so the two cannot both be supported, and a dependent still on `xml` 6 will not resolve against this.
 - Allowed `WebdavClient.copy` to request `Depth: 0` transfers per RFC 4918 §9.8 while rejecting unsupported depths.
 - Preferred the `Lock-Token` response header when returning lock tokens and retained XML fallbacks for RFC 4918 §§9.10.1/10.5 compliance.
 - Added automatic `Cache-Control`/`Pragma: no-cache` headers whenever an `If` header is sent, following RFC 4918 §10.4.5 guidance for proxy safety.

@@ -2,12 +2,12 @@ import 'package:xml/xml.dart';
 
 /// Locate every element in [document] matching [tag] irrespective of namespace.
 List<XmlElement> findAllElements(XmlDocument document, String tag) =>
-    document.findAllElements(tag, namespace: '*').toList();
+    document.findAllElements(tag, namespaceUri: '*').toList();
 
 /// Locate direct or nested children of [element] matching [tag] irrespective
 /// of namespace.
 List<XmlElement> findElements(XmlElement element, String tag) =>
-    element.findElements(tag, namespace: '*').toList();
+    element.findElements(tag, namespaceUri: '*').toList();
 
 /// Extract a string value from the first matching element or return `null`.
 String? getElementText(XmlElement parent, String tag) =>

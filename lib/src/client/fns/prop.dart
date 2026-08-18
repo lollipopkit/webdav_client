@@ -84,7 +84,7 @@ extension WebdavClientPropfind on WebdavClient {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:propertyupdate', nest: () {
-      xmlBuilder.namespace('DAV:', 'd');
+      xmlBuilder.namespaceUri('d', 'DAV:');
 
       final resolution = resolvePropertyNames(
         properties.keys,
@@ -93,7 +93,7 @@ extension WebdavClientPropfind on WebdavClient {
 
       resolution.namespaces.forEach((prefix, uri) {
         if (prefix == 'd') return;
-        xmlBuilder.namespace(uri, prefix);
+        xmlBuilder.namespaceUri(prefix, uri);
       });
 
       xmlBuilder.element('d:set', nest: () {
@@ -222,7 +222,7 @@ extension WebdavClientPropfind on WebdavClient {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:propertyupdate', nest: () {
-      xmlBuilder.namespace('DAV:', 'd');
+      xmlBuilder.namespaceUri('d', 'DAV:');
 
       final setResolution = (setProps != null && setProps.isNotEmpty)
           ? resolvePropertyNames(
@@ -247,7 +247,7 @@ extension WebdavClientPropfind on WebdavClient {
 
       namespaceDeclarations.forEach((prefix, uri) {
         if (prefix == 'd') return;
-        xmlBuilder.namespace(uri, prefix);
+        xmlBuilder.namespaceUri(prefix, uri);
       });
 
       if (setResolution != null) {
@@ -307,10 +307,10 @@ extension WebdavClientPropfind on WebdavClient {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:propertyupdate', nest: () {
-      xmlBuilder.namespace('DAV:', 'd');
+      xmlBuilder.namespaceUri('d', 'DAV:');
       resolution.namespaces.forEach((prefix, uri) {
         if (prefix == 'd') return;
-        xmlBuilder.namespace(uri, prefix);
+        xmlBuilder.namespaceUri(prefix, uri);
       });
 
       for (var i = 0; i < operations.length; i++) {
@@ -454,7 +454,7 @@ extension WebdavClientPropfind on WebdavClient {
     }
 
     return element
-        .findAllElements('privilege', namespace: '*')
+        .findAllElements('privilege', namespaceUri: '*')
         .expand((privilege) => privilege.childElements)
         .map(_formatPropertyName)
         .toList(growable: false);
@@ -476,7 +476,7 @@ extension WebdavClientPropfind on WebdavClient {
     if (acl == null) {
       return const <XmlElement>[];
     }
-    return acl.findElements('ace', namespace: '*').toList(growable: false);
+    return acl.findElements('ace', namespaceUri: '*').toList(growable: false);
   }
 
   /// Discover inherited ACL set hrefs for [path] (RFC 3744 §5.6).
@@ -693,7 +693,7 @@ extension WebdavClientPropfind on WebdavClient {
       return const <String>[];
     }
     return supported
-        .findAllElements('supported-method', namespace: '*')
+        .findAllElements('supported-method', namespaceUri: '*')
         .map((element) => element.getAttribute('name')?.trim())
         .whereType<String>()
         .where((name) => name.isNotEmpty)
@@ -717,7 +717,7 @@ extension WebdavClientPropfind on WebdavClient {
       return const <String>[];
     }
     return supported
-        .findAllElements('supported-live-property', namespace: '*')
+        .findAllElements('supported-live-property', namespaceUri: '*')
         .map((element) => element.childElements.firstOrNull)
         .whereType<XmlElement>()
         .map(_formatPropertyName)
@@ -924,7 +924,7 @@ List<String> _hrefList(XmlElement? element) {
     return const <String>[];
   }
   return element
-      .findAllElements('href', namespace: '*')
+      .findAllElements('href', namespaceUri: '*')
       .map((href) => href.innerText.trim())
       .where((href) => href.isNotEmpty)
       .toList(growable: false);
