@@ -84,7 +84,7 @@ void main() {
       final cancelToken = CancelToken();
       // Cancel after a short delay
       Future.delayed(
-          Duration(milliseconds: 100), () => cancelToken.cancel('test'));
+          const Duration(milliseconds: 100), () => cancelToken.cancel('test'));
 
       expect(
         () => client.readFile('/cancel', '${tmpDir.path}/out.bin',

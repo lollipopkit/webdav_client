@@ -283,7 +283,7 @@ class WebdavClient {
     });
     final requestHeaders = <String, dynamic>{
       'Overwrite': overwrite ? 'T' : 'F',
-      if (headers != null) ...headers,
+      ...?headers,
     };
     return _xmlExtensionRequest(
       'REBIND',
@@ -304,10 +304,10 @@ class WebdavClient {
     CancelToken? cancelToken,
   }) {
     final requestHeaders = <String, dynamic>{
-      if (callback != null) 'Call-Back': callback,
-      if (subscriptionId != null) 'Subscription-ID': subscriptionId,
-      if (lifetimeSeconds != null) 'Subscription-Lifetime': lifetimeSeconds,
-      if (headers != null) ...headers,
+      'Call-Back': ?callback,
+      'Subscription-ID': ?subscriptionId,
+      'Subscription-Lifetime': ?lifetimeSeconds,
+      ...?headers,
     };
     return request<String>(
       'SUBSCRIBE',
@@ -327,7 +327,7 @@ class WebdavClient {
   }) {
     final requestHeaders = <String, dynamic>{
       'Subscription-ID': subscriptionId,
-      if (headers != null) ...headers,
+      ...?headers,
     };
     return request<String>(
       'UNSUBSCRIBE',
@@ -760,8 +760,8 @@ class WebdavClient {
     CancelToken? cancelToken,
   }) {
     final requestHeaders = <String, dynamic>{
-      if (subscriptionId != null) 'Subscription-ID': subscriptionId,
-      if (headers != null) ...headers,
+      'Subscription-ID': ?subscriptionId,
+      ...?headers,
     };
     return request<String>(
       'POLL',
@@ -930,7 +930,7 @@ class WebdavClient {
     final requestHeaders = <String, dynamic>{
       Headers.contentTypeHeader: 'application/xml;charset=UTF-8',
       Headers.acceptHeader: 'application/xml,text/xml',
-      if (headers != null) ...headers,
+      ...?headers,
     };
 
     return request<String>(
@@ -1011,7 +1011,7 @@ class WebdavClient {
       if (depth != null) 'Depth': depth.value,
       Headers.contentTypeHeader: 'application/xml;charset=UTF-8',
       Headers.acceptHeader: 'application/xml,text/xml',
-      if (headers != null) ...headers,
+      ...?headers,
     };
 
     return request<T>(
