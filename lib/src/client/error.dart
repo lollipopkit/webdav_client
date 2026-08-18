@@ -169,5 +169,24 @@ String _formatDavErrorElement(XmlElement errorElement) {
 /// Helper to ensure we always translate dio errors into [WebdavException].
 WebdavException<T> _newResponseError<T extends Object?>(Response<T> resp,
     [String? message]) {
+  if (message == null && _isUnfollowableRedirect(resp)) {
+    return WebdavException.fromResponse(resp, 'No location header found');
+  }
   return WebdavException.fromResponse(resp, message);
+}
+
+/// A 3xx that the transport could not follow because the server omitted the
+/// `Location` header, leaving nothing for the caller to act on.
+bool _isUnfollowableRedirect(Response<Object?> resp) {
+  switch (resp.statusCode) {
+    case 301:
+    case 302:
+    case 303:
+    case 307:
+    case 308:
+      final locations = resp.headers['location'];
+      return locations == null || locations.isEmpty;
+    default:
+      return false;
+  }
 }

@@ -241,6 +241,9 @@ class _WdDio with DioMixin {
           stripSensitiveRedirectHeaders: !_sameOrigin(uri, redirectUri),
         );
       }
+      // No Location to follow: hand the response back so callers of the raw
+      // `request` escape hatch still see it. High-level verbs turn it into a
+      // 'No location header found' error via `_newResponseError`.
     }
 
     return resp;
