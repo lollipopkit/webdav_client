@@ -135,5 +135,60 @@ void main() {
         equals('https://cdn.example.org/assets/logo.png'),
       );
     });
+
+    test('percent-encodes spaces so Destination stays a valid URI', () {
+      final resolved = resolveAgainstBaseUrl(base, '/test dir2/README 2.md');
+      expect(
+        resolved,
+        equals(
+          'https://example.com/remote.php/dav/files/alice'
+          '/test%20dir2/README%202.md',
+        ),
+      );
+    });
+
+    test('percent-encodes non-ASCII segments as UTF-8', () {
+      final resolved = resolveAgainstBaseUrl(base, '/文档/笔记.md');
+      expect(
+        resolved,
+        equals(
+          'https://example.com/remote.php/dav/files/alice'
+          '/%E6%96%87%E6%A1%A3/%E7%AC%94%E8%AE%B0.md',
+        ),
+      );
+    });
+
+    test('encodes astral characters as a single UTF-8 sequence', () {
+      final resolved = resolveAgainstBaseUrl(base, '/notes/🎉.txt');
+      expect(
+        resolved,
+        equals(
+          'https://example.com/remote.php/dav/files/alice'
+          '/notes/%F0%9F%8E%89.txt',
+        ),
+      );
+    });
+
+    test('leaves existing escapes intact rather than double-encoding', () {
+      final resolved = resolveAgainstBaseUrl(base, '/a%2Fb/Media%20Library');
+      expect(
+        resolved,
+        equals(
+          'https://example.com/remote.php/dav/files/alice'
+          '/a%2Fb/Media%20Library',
+        ),
+      );
+    });
+
+    test('escapes a bare percent that is not an escape sequence', () {
+      final resolved = resolveAgainstBaseUrl(base, '/100% done/report.txt');
+      expect(
+        resolved,
+        equals(
+          'https://example.com/remote.php/dav/files/alice'
+          '/100%25%20done/report.txt',
+        ),
+      );
+    });
   });
 }

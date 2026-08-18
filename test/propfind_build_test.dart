@@ -9,7 +9,7 @@ void main() {
       final document = XmlDocument.parse(xml);
 
       final includeElements =
-          document.findAllElements('include', namespace: '*');
+          document.findAllElements('include', namespaceUri: '*');
       expect(includeElements, isEmpty);
     });
 
@@ -21,9 +21,9 @@ void main() {
       final document = XmlDocument.parse(xml);
 
       final include =
-          document.findAllElements('include', namespace: '*').single;
+          document.findAllElements('include', namespaceUri: '*').single;
       final propertyElement = include
-          .findElements('permissions', namespace: 'http://owncloud.org/ns')
+          .findElements('permissions', namespaceUri: 'http://owncloud.org/ns')
           .single;
 
       expect(propertyElement.name.prefix, 'oc');

@@ -360,7 +360,7 @@ String _normalizeHrefForComparison(
     value = '/$value';
   }
 
-  value = value.replaceAll(RegExp(r'/+'), '/');
+  value = value.replaceAll(RegExp('/+'), '/');
   if (value.isEmpty) {
     value = '/';
   }

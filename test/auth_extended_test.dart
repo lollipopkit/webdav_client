@@ -20,20 +20,20 @@ void main() {
 
   group('BasicAuth', () {
     test('produces correct base64 header', () {
-      final auth = BasicAuth(user: 'admin', pwd: 'secret');
+      const auth = BasicAuth(user: 'admin', pwd: 'secret');
       final result = auth.authorize('GET', '/');
       expect(result, startsWith('Basic '));
       expect(result, 'Basic YWRtaW46c2VjcmV0');
     });
 
     test('handles special characters', () {
-      final auth = BasicAuth(user: 'user@domain', pwd: 'p@ss:w0rd!');
+      const auth = BasicAuth(user: 'user@domain', pwd: 'p@ss:w0rd!');
       final result = auth.authorize('PUT', '/file');
       expect(result, startsWith('Basic '));
     });
 
     test('consistent across methods and paths', () {
-      final auth = BasicAuth(user: 'u', pwd: 'p');
+      const auth = BasicAuth(user: 'u', pwd: 'p');
       final a = auth.authorize('GET', '/a');
       final b = auth.authorize('PUT', '/b');
       expect(a, equals(b));
@@ -42,12 +42,12 @@ void main() {
 
   group('BearerAuth', () {
     test('produces correct bearer header', () {
-      final auth = BearerAuth(token: 'my-jwt-token');
+      const auth = BearerAuth(token: 'my-jwt-token');
       expect(auth.authorize('GET', '/'), 'Bearer my-jwt-token');
     });
 
     test('consistent across methods', () {
-      final auth = BearerAuth(token: 'tok');
+      const auth = BearerAuth(token: 'tok');
       expect(auth.authorize('GET', '/'), equals(auth.authorize('POST', '/')));
     });
   });
@@ -131,7 +131,7 @@ void main() {
       // the quoted-string grammar). So `quoted\realm` → parsed value
       // `quotedrealm`, which when escaped for the Authorization header
       // contains no backslashes to double.
-      expect(result, contains(r'realm="quotedrealm"'));
+      expect(result, contains('realm="quotedrealm"'));
       expect(result, contains(r'nonce="n\"q"'));
     });
 

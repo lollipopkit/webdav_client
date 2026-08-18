@@ -9,7 +9,7 @@ void main() {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() async => server.close(force: true));
 
-    String body = '';
+    var body = '';
 
     server.listen((request) async {
       body = await utf8.decoder.bind(request).join();

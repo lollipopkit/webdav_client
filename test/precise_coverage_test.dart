@@ -25,7 +25,7 @@ void main() {
       });
       final client = WebdavClient.noAuth(
           url: 'http://${server.address.host}:${server.port}');
-      expect(() => client.ping(), throwsA(isA<WebdavException>()));
+      expect(client.ping, throwsA(isA<WebdavException>()));
     });
   });
 
@@ -311,7 +311,7 @@ void main() {
           url: 'http://${server.address.host}:${server.port}');
       final tmpDir = await Directory.systemTemp.createTemp('dio_deflate_');
       addTearDown(() async {
-        if (await tmpDir.exists()) await tmpDir.delete(recursive: true);
+        if (tmpDir.existsSync()) await tmpDir.delete(recursive: true);
       });
       int? lastTotal;
       await client.readFile('/d', '${tmpDir.path}/o',
@@ -332,7 +332,7 @@ void main() {
           url: 'http://${server.address.host}:${server.port}');
       final tmpDir = await Directory.systemTemp.createTemp('dio_compress_');
       addTearDown(() async {
-        if (await tmpDir.exists()) await tmpDir.delete(recursive: true);
+        if (tmpDir.existsSync()) await tmpDir.delete(recursive: true);
       });
       int? lastTotal;
       await client.readFile('/c', '${tmpDir.path}/o',
@@ -353,7 +353,7 @@ void main() {
           url: 'http://${server.address.host}:${server.port}');
       final tmpDir = await Directory.systemTemp.createTemp('dio_progress_');
       addTearDown(() async {
-        if (await tmpDir.exists()) await tmpDir.delete(recursive: true);
+        if (tmpDir.existsSync()) await tmpDir.delete(recursive: true);
       });
       final p = <(int, int)>[];
       await client.readFile('/p', '${tmpDir.path}/o',
@@ -374,7 +374,7 @@ void main() {
           url: 'http://${server.address.host}:${server.port}');
       final tmpDir = await Directory.systemTemp.createTemp('dio_cancel_');
       addTearDown(() async {
-        if (await tmpDir.exists()) await tmpDir.delete(recursive: true);
+        if (tmpDir.existsSync()) await tmpDir.delete(recursive: true);
       });
       final cancel = CancelToken();
       // Cancel before the request even starts - the request may already

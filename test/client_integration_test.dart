@@ -737,7 +737,7 @@ void main() {
 
       final tmpDir = await Directory.systemTemp.createTemp('webdav_stream_');
       addTearDown(() async {
-        if (await tmpDir.exists()) {
+        if (tmpDir.existsSync()) {
           await tmpDir.delete(recursive: true);
         }
       });
@@ -746,7 +746,7 @@ void main() {
       await client.readFile('/stream-file', savePath);
 
       final file = File(savePath);
-      expect(await file.exists(), isTrue);
+      expect(file.existsSync(), isTrue);
       expect(await file.readAsBytes(), [10, 20, 30, 40, 50]);
     });
 
@@ -767,7 +767,7 @@ void main() {
 
       final tmpDir = await Directory.systemTemp.createTemp('webdav_progress_');
       addTearDown(() async {
-        if (await tmpDir.exists()) {
+        if (tmpDir.existsSync()) {
           await tmpDir.delete(recursive: true);
         }
       });
@@ -795,7 +795,7 @@ void main() {
 
       final tmpDir = await Directory.systemTemp.createTemp('webdav_throw_');
       addTearDown(() async {
-        if (await tmpDir.exists()) {
+        if (tmpDir.existsSync()) {
           await tmpDir.delete(recursive: true);
         }
       });
@@ -822,7 +822,7 @@ void main() {
 
       final tmpDir = await Directory.systemTemp.createTemp('webdav_nocl_');
       addTearDown(() async {
-        if (await tmpDir.exists()) {
+        if (tmpDir.existsSync()) {
           await tmpDir.delete(recursive: true);
         }
       });
@@ -964,7 +964,7 @@ void main() {
 
       final tmpDir = await Directory.systemTemp.createTemp('webdav_upload_');
       addTearDown(() async {
-        if (await tmpDir.exists()) {
+        if (tmpDir.existsSync()) {
           await tmpDir.delete(recursive: true);
         }
       });
@@ -997,7 +997,7 @@ void main() {
       final tmpDir =
           await Directory.systemTemp.createTemp('webdav_upload_fail_');
       addTearDown(() async {
-        if (await tmpDir.exists()) {
+        if (tmpDir.existsSync()) {
           await tmpDir.delete(recursive: true);
         }
       });

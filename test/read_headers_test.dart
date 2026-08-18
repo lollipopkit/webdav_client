@@ -79,7 +79,7 @@ void main() {
     );
     final tmpDir = await Directory.systemTemp.createTemp('webdav_range_');
     addTearDown(() async {
-      if (await tmpDir.exists()) {
+      if (tmpDir.existsSync()) {
         await tmpDir.delete(recursive: true);
       }
     });

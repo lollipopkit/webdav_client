@@ -25,7 +25,7 @@ extension WebdavClientMk on WebdavClient {
       ifHeader: ifHeader,
       headers: headers,
     );
-    var status = resp.statusCode;
+    final status = resp.statusCode;
     if (status != 201 && status != 405) {
       throw _newResponseError(resp);
     }
@@ -50,10 +50,10 @@ extension WebdavClientMk on WebdavClient {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
     xmlBuilder.element('d:mkcol', nest: () {
-      xmlBuilder.namespace('DAV:', 'd');
+      xmlBuilder.namespaceUri('d', 'DAV:');
       resolution.namespaces.forEach((prefix, uri) {
         if (prefix == 'd') return;
-        xmlBuilder.namespace(uri, prefix);
+        xmlBuilder.namespaceUri(prefix, uri);
       });
       xmlBuilder.element('d:set', nest: () {
         xmlBuilder.element('d:prop', nest: () {
@@ -101,11 +101,11 @@ extension WebdavClientMk on WebdavClient {
     if (status == 409) {
       final pathOnly = path.split('?').first.split('#').first;
       final paths = pathOnly.split('/').where((segment) => segment.isNotEmpty);
-      var sub = '/';
-      for (var e in paths) {
-        sub += '$e/';
+      final sub = StringBuffer('/');
+      for (final e in paths) {
+        sub.write('$e/');
         final resp = await _client.wdMkcol(
-          sub,
+          sub.toString(),
           cancelToken: cancelToken,
           ifHeader: ifHeader,
           headers: headers,

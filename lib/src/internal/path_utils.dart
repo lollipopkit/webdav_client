@@ -188,16 +188,73 @@ String _replaceRawPath(
   if (!rawPath.startsWith('/')) {
     buffer.write('/');
   }
-  buffer.write(rawPath);
+  buffer.write(_percentEncode(rawPath, _pathAllowed));
   if (query != null) {
     buffer
       ..write('?')
-      ..write(query);
+      ..write(_percentEncode(query, _queryAllowed));
   }
   if (fragment != null) {
     buffer
       ..write('#')
-      ..write(fragment);
+      ..write(_percentEncode(fragment, _queryAllowed));
   }
   return buffer.toString();
 }
+
+/// Characters allowed unescaped in a URI path: `pchar` plus `/` (RFC 3986 §3.3).
+const _pathAllowed = r"-._~!$&'()*+,;=:@/";
+
+/// Characters allowed unescaped in a query or fragment: `pchar` plus `/` and
+/// `?` (RFC 3986 §§3.4-3.5).
+const _queryAllowed = r"-._~!$&'()*+,;=:@/?";
+
+/// Percent-encode [raw] so the result is a valid URI component, leaving
+/// existing `%XX` escapes untouched so callers can pass pre-encoded input
+/// (such as `%2F` standing for a literal slash inside a segment).
+String _percentEncode(String raw, String allowed) {
+  final buffer = StringBuffer();
+  // Characters needing escapes are buffered so surrogate pairs reach
+  // `Uri.encodeComponent` intact and encode to a single UTF-8 sequence.
+  var pending = 0;
+
+  void flushPending(int end) {
+    if (pending == 0) return;
+    buffer.write(Uri.encodeComponent(raw.substring(end - pending, end)));
+    pending = 0;
+  }
+
+  for (var i = 0; i < raw.length; i++) {
+    final char = raw[i];
+    if (char == '%' && _isEscapeAt(raw, i)) {
+      flushPending(i);
+      buffer.write(raw.substring(i, i + 3));
+      i += 2;
+      continue;
+    }
+    final code = raw.codeUnitAt(i);
+    final isUnreserved = (code >= 0x30 && code <= 0x39) || // 0-9
+        (code >= 0x41 && code <= 0x5A) || // A-Z
+        (code >= 0x61 && code <= 0x7A); // a-z
+    if (isUnreserved || allowed.contains(char)) {
+      flushPending(i);
+      buffer.write(char);
+      continue;
+    }
+    pending++;
+  }
+  flushPending(raw.length);
+  return buffer.toString();
+}
+
+/// Whether [raw] holds a complete `%XX` escape starting at [index].
+bool _isEscapeAt(String raw, int index) {
+  if (index + 2 >= raw.length) return false;
+  return _isHexDigit(raw.codeUnitAt(index + 1)) &&
+      _isHexDigit(raw.codeUnitAt(index + 2));
+}
+
+bool _isHexDigit(int code) =>
+    (code >= 0x30 && code <= 0x39) || // 0-9
+    (code >= 0x41 && code <= 0x46) || // A-F
+    (code >= 0x61 && code <= 0x66); // a-f

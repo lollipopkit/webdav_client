@@ -39,7 +39,7 @@ final class BasicAuth extends Auth {
 
   @override
   String authorize(String method, String path) {
-    List<int> bytes = utf8.encode('$user:$pwd');
+    final List<int> bytes = utf8.encode('$user:$pwd');
     return 'Basic ${base64Encode(bytes)}';
   }
 }
@@ -298,7 +298,7 @@ class DigestParts {
   DigestParts(String? authHeader) {
     if (authHeader != null) {
       // First, extract the authentication scheme
-      String headerData = authHeader;
+      var headerData = authHeader;
       if (authHeader.toLowerCase().startsWith('digest')) {
         // Remove 'Digest ' prefix to isolate the parameters
         headerData = authHeader.substring(6).trim();
@@ -386,7 +386,7 @@ class DigestParts {
           if (escaping) {
             buffer.write(char);
             escaping = false;
-          } else if (char == '\\') {
+          } else if (char == r'\') {
             escaping = true;
           } else if (char == '"') {
             break;

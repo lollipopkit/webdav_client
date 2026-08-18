@@ -118,7 +118,7 @@ void main() {
       server.listen((request) async {
         if (request.method == 'MKCOL') {
           capturedBody =
-              await request.map((data) => String.fromCharCodes(data)).join();
+              await request.map(String.fromCharCodes).join();
           capturedContentType = request.headers.contentType?.toString();
           request.response.statusCode = HttpStatus.created;
         } else {
@@ -131,7 +131,7 @@ void main() {
         url: 'http://${server.address.host}:${server.port}',
       );
 
-      final xmlBody = '''<?xml version="1.0" encoding="utf-8"?>
+      const xmlBody = '''<?xml version="1.0" encoding="utf-8"?>
 <d:mkcol xmlns:d="DAV:">
   <d:set>
     <d:prop>
