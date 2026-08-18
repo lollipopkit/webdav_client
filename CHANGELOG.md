@@ -70,6 +70,10 @@
 - A 3xx response with no `Location` header now reports `No location header
   found` instead of a generic failure. The raw `request` escape hatch still
   returns the response unchanged.
+- Cancelling a `readFile` no longer raises `PathNotFoundException` when the
+  partial download has already been removed. The cleanup runs from an unawaited
+  cancel handler, so the error surfaced as an unhandled async error rather than
+  reaching the caller.
 - `resolveAgainstBaseUrl` strips dot-segments per RFC 4918 §8.3.
 - `resolveAgainstBaseUrl` treats leading-slash references as server-root URLs.
 - `WebdavFile` retains custom property XML, so empty and structured values
