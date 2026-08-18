@@ -727,7 +727,13 @@ class _WdDio with DioMixin {
         closed = true;
         await asyncWrite;
         await fileReader.close();
-        await file.delete();
+        try {
+          await file.delete();
+        } on PathNotFoundException {
+          // The caller may have removed the partial download already. This runs
+          // from the unawaited `whenCancel` handler, where throwing would
+          // surface as an unhandled async error instead of reaching the caller.
+        }
       }
     }
 
