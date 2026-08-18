@@ -1,22 +1,82 @@
 # Changelog
 
-### Unreleased
-- Moved to `xml` 7. The `namespace` argument and `XmlBuilder.namespace` are deprecated there in favour of `namespaceUri`, whose builder form takes the prefix first — every call site is converted. Note the constraint is now `^7.0.1` rather than `^6.0.0`: `namespaceUri` does not exist in 6, so the two cannot both be supported, and a dependent still on `xml` 6 will not resolve against this.
-- Allowed `WebdavClient.copy` to request `Depth: 0` transfers per RFC 4918 §9.8 while rejecting unsupported depths.
-- Preferred the `Lock-Token` response header when returning lock tokens and retained XML fallbacks for RFC 4918 §§9.10.1/10.5 compliance.
-- Added automatic `Cache-Control`/`Pragma: no-cache` headers whenever an `If` header is sent, following RFC 4918 §10.4.5 guidance for proxy safety.
-- Removed redundant OPTIONS preflights before GET/PUT operations to reduce latency and follow RFC 4918 guidance.
-- Normalized `resolveAgainstBaseUrl` output to strip dot-segments per RFC 4918 §8.3, avoiding malformed Destination headers.
-- Treated leading-slash references as server-root URLs in `resolveAgainstBaseUrl`, aligning Destination/If header construction with RFC 4918 §8.3.
-- Surfaced per-member diagnostics for DELETE 207 Multi-Status responses to match SabreDAV behaviour.
-- Added `WebdavClient.options()` to expose DAV capabilities without custom plumbing.
-- Added `WebdavClient.request()` so advanced WebDAV verbs (REPORT, SEARCH, etc.) reuse the built-in auth stack.
-- Added `parseMultiStatus` and companion data types to mirror SabreDAV diagnostics for RFC 4918 Multi-Status bodies.
-- Added `WebdavClient.propFindRaw` to expose per-property status codes similar to SabreDAV’s propFind helpers.
-- Enriched `MultiStatusResponse` with DAV error metadata (`<d:error>`, `<d:responsedescription>`, `<d:location>`).
-- Preserved custom property XML in `WebdavFile` so empty or structured values survive PROPFIND parsing.
-- Treated all 2xx PROPFIND propstat statuses as success when parsing `WebdavFile`, avoiding dropped entries from compliant servers.
-- Reused `parseMultiStatusToMap` inside `propFindRaw` and exposed top-level Multi-Status codes for SabreDAV parity.
+## [2.0.0]
 
-### [1.0.0]
+### Breaking
+
+- The `xml` constraint moved from `^6.0.0` to `^7.0.1`. `xml` 7 deprecates the
+  `namespace` arguments in favour of `namespaceUri`, which does not exist in 6,
+  so both versions cannot be supported at once. `XmlElement` appears in the
+  return types of `propFind`, `propFindRaw`, `accessControlList`, and
+  `aclRestrictions`, so dependents pinned to `xml` 6 will not resolve against
+  this release.
+- The SDK constraint moved from `>=3.0.0 <4.0.0` to `^3.11.0`. `xml` 7.0.1
+  requires Dart 3.11, so the previous floor could not be honoured; it is now
+  declared accurately rather than failing during resolution.
+- Remaining dependency floors were raised to the versions this release is
+  tested against: `convert` `^3.1.2`, `crypto` `^3.0.7`, `dio` `^5.11.0`.
+- Sources moved from `src/client.dart`, `src/dio.dart`, `src/file.dart`, and
+  `src/utils.dart` into `src/client/`, `src/models/`, and `src/internal/`.
+  Importing `package:webdav_client_plus/webdav_client_plus.dart` is unaffected;
+  direct imports of the old `src/` paths are not.
+- GET and PUT no longer issue an OPTIONS preflight. Servers that relied on the
+  preflight to create an implicit session see one fewer request.
+
+### Added
+
+- Access control (RFC 3744): `acl`, `accessControlList`, `aclRestrictions`,
+  `currentUserPrivilegeSet`, `currentUserPrincipal`, `inheritedAclSet`,
+  `ownerPrincipal`, `groupMemberSet`, `groupMembership`,
+  `principalCollectionSet`, `principalMatch`, `principalPropertySearch`,
+  `principalSearchPropertySet`, `principalUrl`, `alternateUriSet`.
+- Versioning (RFC 3253): `versionControl`, `checkin`, `checkout`, `uncheckout`,
+  `checkedIn`, `checkedOut`, `versionTree`, `versionHistory`,
+  `versionHistoryReport`, `label`, `merge`, `baselineControl`, `mkactivity`,
+  `mkworkspace`, `expandProperty`, `predecessorSet`, `successorSet`,
+  `activityCollectionSet`, `workspaceCollectionSet`.
+- Bindings (RFC 5842): `bind`, `unbind`, `rebind`.
+- Collection synchronization (RFC 6578): `syncCollection`.
+- Property access: `propFind`, `propFindAll`, `propFindDepth`, `propFindNames`,
+  `propFindRaw`, `propPatch`, `orderpatch`, `mkdirWithProps`,
+  `supportedMethods`, `supportedLiveProperties`, `supportedReports`,
+  `resourceTypes`, `quotaBytes`, `source`, `comment`, `creatorDisplayName`.
+  `propFindRaw` reports per-property status codes rather than collapsing them.
+- Locking: `lockDiscovery`, `supportedLocks`, `refreshLock`.
+- Transport: `request` runs arbitrary verbs through the built-in auth stack,
+  with `report`, `search`, `options`, and `head` built on top. Also added
+  `readStream`, `writeStream`, `create`, `updateIfMatch`, and `absoluteUrl`.
+- Subscriptions: `subscribe`, `unsubscribe`, `poll`.
+- Multi-Status parsing: `parseMultiStatus`, `parseMultiStatusToMap`,
+  `MultiStatusResponse`, and `MultiStatusPropstat`, carrying per-property
+  status codes together with `<d:error>`, `<d:responsedescription>`, and
+  `<d:location>`.
+
+### Changed
+
+- `copy` accepts `Depth: 0` per RFC 4918 §9.8 and rejects unsupported depths.
+- Lock tokens are read from the `Lock-Token` response header first, with the
+  XML body retained as a fallback (RFC 4918 §§9.10.1, 10.5).
+- Requests carrying an `If` header now also send `Cache-Control: no-cache` and
+  `Pragma: no-cache` (RFC 4918 §10.4.5).
+- DELETE responses with 207 Multi-Status report per-member diagnostics.
+
+### Fixed
+
+- `Destination` and `If` header URLs are percent-encoded. Paths containing a
+  space or any non-ASCII character previously produced an invalid header value,
+  which servers such as dufs rejected with `400 Invalid Destination`, breaking
+  `copy`, `move`, and `rename` on those paths. Existing `%XX` escapes are left
+  intact, so pre-encoded input such as `%2F` is not double-encoded.
+- A 3xx response with no `Location` header now reports `No location header
+  found` instead of a generic failure. The raw `request` escape hatch still
+  returns the response unchanged.
+- `resolveAgainstBaseUrl` strips dot-segments per RFC 4918 §8.3.
+- `resolveAgainstBaseUrl` treats leading-slash references as server-root URLs.
+- `WebdavFile` retains custom property XML, so empty and structured values
+  survive PROPFIND parsing.
+- `WebdavFile` parsing accepts every 2xx propstat status, so entries from
+  compliant servers are no longer dropped.
+
+## [1.0.0]
+
 - Initial release of the project.
