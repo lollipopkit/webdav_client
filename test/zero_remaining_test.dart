@@ -24,7 +24,7 @@ void main() {
       });
       final client = WebdavClient.noAuth(
           url: 'http://${server.address.host}:${server.port}');
-      expect(() => client.ping(), throwsA(isA<WebdavException>()));
+      expect(client.ping, throwsA(isA<WebdavException>()));
     });
   });
 
@@ -81,7 +81,7 @@ void main() {
           url: 'http://${server.address.host}:${server.port}');
       final tmpDir = await Directory.systemTemp.createTemp('wd_deflate_');
       addTearDown(() async {
-        if (await tmpDir.exists()) await tmpDir.delete(recursive: true);
+        if (tmpDir.existsSync()) await tmpDir.delete(recursive: true);
       });
 
       int? lastTotal;
@@ -103,7 +103,7 @@ void main() {
           url: 'http://${server.address.host}:${server.port}');
       final tmpDir = await Directory.systemTemp.createTemp('wd_compress2_');
       addTearDown(() async {
-        if (await tmpDir.exists()) await tmpDir.delete(recursive: true);
+        if (tmpDir.existsSync()) await tmpDir.delete(recursive: true);
       });
 
       int? lastTotal;
@@ -124,7 +124,7 @@ void main() {
           url: 'http://${server.address.host}:${server.port}');
       final tmpDir = await Directory.systemTemp.createTemp('wd_cancel2_');
       addTearDown(() async {
-        if (await tmpDir.exists()) await tmpDir.delete(recursive: true);
+        if (tmpDir.existsSync()) await tmpDir.delete(recursive: true);
       });
 
       // Cancel immediately - should trigger the cancel path
@@ -137,7 +137,7 @@ void main() {
         fail('Expected an exception from cancelled download');
       } catch (e) {
         expect(e, isException);
-        expect(await File('${tmpDir.path}/out.bin').exists(), isFalse,
+        expect(File('${tmpDir.path}/out.bin').existsSync(), isFalse,
             reason: 'closeAndDelete should remove the output file');
       }
     });
@@ -155,7 +155,7 @@ void main() {
           url: 'http://${server.address.host}:${server.port}');
       final tmpDir = await Directory.systemTemp.createTemp('wd_total_');
       addTearDown(() async {
-        if (await tmpDir.exists()) await tmpDir.delete(recursive: true);
+        if (tmpDir.existsSync()) await tmpDir.delete(recursive: true);
       });
 
       final progress = <(int, int)>[];

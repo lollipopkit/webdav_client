@@ -118,7 +118,7 @@ void main() {
       server.listen((request) async {
         if (request.method == 'MKCOL') {
           capturedBody =
-              await request.map((data) => String.fromCharCodes(data)).join();
+              await request.map(String.fromCharCodes).join();
           capturedContentType = request.headers.contentType?.toString();
           request.response.statusCode = HttpStatus.created;
         } else {

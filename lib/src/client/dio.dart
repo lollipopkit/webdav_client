@@ -1,6 +1,6 @@
 part of 'client.dart';
 
-final _httpPrefixReg = RegExp(r'(http|https)://');
+final _httpPrefixReg = RegExp('(http|https)://');
 
 /// Thin wrapper around `dio` that injects WebDAV-specific behaviour such as
 /// automatic auth retries, base URL resolution and RFC 4918 error translation.
@@ -21,7 +21,7 @@ class _WdDio with DioMixin {
 
   /// Issue an HTTP request using WebDAV-aware defaults.
   ///
-  /// - Resolves relative [path] entries against [client.url].
+  /// - Resolves relative [path] entries against [WebdavClient.url].
   /// - Injects Authorization headers via the configured [Auth] strategy.
   /// - Retries 401 responses once when a Digest challenge is received.
   /// - Preserves the raw [Response] so higher-level helpers can perform
@@ -141,7 +141,6 @@ class _WdDio with DioMixin {
                 authRetryCount: authRetryCount + 1,
               );
             }
-            break;
 
           case final BasicAuth _:
             // Check if the server supports Basic auth
@@ -533,7 +532,7 @@ class _WdDio with DioMixin {
     String? ifHeader,
     Map<String, dynamic>? headers,
   }) async {
-    final method = isCopy == true ? 'COPY' : 'MOVE';
+    final method = isCopy ? 'COPY' : 'MOVE';
     final resp = await req(
       method,
       oldPath,
@@ -547,7 +546,7 @@ class _WdDio with DioMixin {
           options.headers?.addAll(headers);
         }
         options.headers?['Destination'] = destinationHeader;
-        options.headers?['Overwrite'] = overwrite == true ? 'T' : 'F';
+        options.headers?['Overwrite'] = overwrite ? 'T' : 'F';
         options.headers?['Depth'] = depth.value;
         if (ifHeader != null && ifHeader.isNotEmpty) {
           options.headers?['If'] = ifHeader;
@@ -663,7 +662,7 @@ class _WdDio with DioMixin {
         cancelToken: cancelToken,
       );
     } on WebdavException catch (e) {
-      if (e.response!.requestOptions.receiveDataWhenStatusError == true) {
+      if (e.response!.requestOptions.receiveDataWhenStatusError) {
         final res = await transformer.transformResponse(
           e.response!.requestOptions..responseType = ResponseType.json,
           e.response!.data as ResponseBody,
@@ -801,11 +800,10 @@ class _WdDio with DioMixin {
     });
 
     final recvTimeout = resp.requestOptions.receiveTimeout;
-    const zeroDuration = Duration(milliseconds: 0);
-    if (recvTimeout != null && recvTimeout.compareTo(zeroDuration) > 0) {
+    if (recvTimeout != null && recvTimeout > Duration.zero) {
       future = future
           .timeout(resp.requestOptions.receiveTimeout!)
-          .catchError((Object err) async {
+          .catchError((Object err, StackTrace stackTrace) async {
         await subscription.cancel();
         await closeAndDelete();
         if (err is TimeoutException) {
@@ -816,7 +814,7 @@ class _WdDio with DioMixin {
             response: resp,
           );
         }
-        throw err;
+        Error.throwWithStackTrace(err, stackTrace);
       });
     }
     // ignore: invalid_use_of_internal_member

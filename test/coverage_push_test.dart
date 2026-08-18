@@ -239,7 +239,7 @@ void main() {
 
       final tmpDir = await Directory.systemTemp.createTemp('webdav_null_');
       addTearDown(() async {
-        if (await tmpDir.exists()) await tmpDir.delete(recursive: true);
+        if (tmpDir.existsSync()) await tmpDir.delete(recursive: true);
       });
 
       // This should either work (empty file) or throw

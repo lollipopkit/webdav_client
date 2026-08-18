@@ -38,7 +38,7 @@ class WebdavException<T extends Object?> implements Exception {
     final status = response.statusCode;
     final statusMessage = response.statusMessage;
 
-    String errorMessage = message ?? 'WebDAV operation failed';
+    var errorMessage = message ?? 'WebDAV operation failed';
 
     // RFC 4918: normalise well-known WebDAV status codes into actionable
     // diagnostics so callers receive consistent guidance when debugging
@@ -93,53 +93,42 @@ class WebdavException<T extends Object?> implements Exception {
         } catch (_) {
           errorMessage = 'Multi-Status response with errors';
         }
-        break;
       case 422:
         // Unprocessable Entity (RFC 4918 §11.2 / §16).
         errorMessage = 'Unprocessable Entity: The server understands the '
             'content type but was unable to process the contained instructions';
-        break;
       case 423:
         // Locked (RFC 4918 §11.3).
         errorMessage = 'Resource is locked';
-        break;
       case 424:
         // Failed Dependency (RFC 4918 §11.4).
         errorMessage = 'Failed dependency: The method could not be performed '
             'because the requested action depended on another action that failed';
-        break;
       case 507:
         // Insufficient Storage (RFC 4918 §11.5).
         errorMessage = 'Insufficient storage';
-        break;
       case 508:
         // Loop Detected (RFC 5842 §7.2).
         errorMessage =
             'Loop detected: The binding graph contains a cycle for this request';
-        break;
       // Other common status codes
       case 401:
         // HTTP 401 (RFC 7235 §3.1) — authentication challenge.
         errorMessage = 'Authentication required';
-        break;
       case 403:
         // HTTP 403 (RFC 7231 §6.5.3) — permissions issue.
         errorMessage = 'Access forbidden';
-        break;
       case 404:
         // HTTP 404 (RFC 7231 §6.5.4) — resource missing.
         errorMessage = 'Resource not found';
-        break;
       case 409:
         // HTTP 409 (RFC 7231 §6.5.8) — conflict with current state.
         errorMessage = 'Conflict: The request could not be completed due to a '
             'conflict with the current state of the resource';
-        break;
       case 412:
         // HTTP 412 (RFC 7232 §4.2) — conditional headers failed.
         errorMessage =
             'Precondition failed: One of the conditions specified in the request header failed';
-        break;
     }
 
     return WebdavException(

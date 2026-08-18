@@ -22,7 +22,7 @@ void main() {
         () async {
       String? method;
       String? depth;
-      String body = '';
+      var body = '';
 
       server.listen((request) async {
         method = request.method;
@@ -145,7 +145,7 @@ void main() {
 
     test('propFindNames sends propname and returns successful property names',
         () async {
-      String body = '';
+      var body = '';
 
       server.listen((request) async {
         body = await utf8.decoder.bind(request).join();
@@ -214,7 +214,7 @@ void main() {
     });
 
     test('propFindAll sends allprop with include list', () async {
-      String body = '';
+      var body = '';
 
       server.listen((request) async {
         body = await utf8.decoder.bind(request).join();

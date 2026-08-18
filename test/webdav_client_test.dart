@@ -34,7 +34,7 @@ void main() {
 
     setUp(() async {
       final baseDir = Directory(_baseTestDir);
-      if (await baseDir.exists()) {
+      if (baseDir.existsSync()) {
         await baseDir.delete(recursive: true);
       }
       await baseDir.create();
@@ -267,7 +267,7 @@ void main() {
   test('Invalid URL', () async {
     final invalidClient = WebdavClient.noAuth(url: 'http://invalid-url');
     expect(
-      () => invalidClient.ping(),
+      invalidClient.ping,
       throwsA(anything),
     );
   });
@@ -283,7 +283,7 @@ class _DufsServer {
   Future<void> dispose() async {
     _process.kill();
     await _process.exitCode;
-    if (await rootDirectory.exists()) {
+    if (rootDirectory.existsSync()) {
       await rootDirectory.delete(recursive: true);
     }
   }

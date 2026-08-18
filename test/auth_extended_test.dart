@@ -131,7 +131,7 @@ void main() {
       // the quoted-string grammar). So `quoted\realm` → parsed value
       // `quotedrealm`, which when escaped for the Authorization header
       // contains no backslashes to double.
-      expect(result, contains(r'realm="quotedrealm"'));
+      expect(result, contains('realm="quotedrealm"'));
       expect(result, contains(r'nonce="n\"q"'));
     });
 

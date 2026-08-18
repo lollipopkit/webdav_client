@@ -336,7 +336,7 @@ extension _Utils on WebdavClient {
   }
 
   String? _extractLockTokenFromIfHeader(String ifHeader) {
-    final regex = RegExp(r'<([^>]+)>');
+    final regex = RegExp('<([^>]+)>');
     final matches = regex.allMatches(ifHeader);
     for (final match in matches) {
       final token = match.group(1);

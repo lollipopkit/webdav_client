@@ -25,7 +25,7 @@ extension WebdavClientMk on WebdavClient {
       ifHeader: ifHeader,
       headers: headers,
     );
-    var status = resp.statusCode;
+    final status = resp.statusCode;
     if (status != 201 && status != 405) {
       throw _newResponseError(resp);
     }
@@ -101,11 +101,11 @@ extension WebdavClientMk on WebdavClient {
     if (status == 409) {
       final pathOnly = path.split('?').first.split('#').first;
       final paths = pathOnly.split('/').where((segment) => segment.isNotEmpty);
-      var sub = '/';
-      for (var e in paths) {
-        sub += '$e/';
+      final sub = StringBuffer('/');
+      for (final e in paths) {
+        sub.write('$e/');
         final resp = await _client.wdMkcol(
-          sub,
+          sub.toString(),
           cancelToken: cancelToken,
           ifHeader: ifHeader,
           headers: headers,

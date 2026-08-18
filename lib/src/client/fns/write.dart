@@ -62,7 +62,7 @@ extension WebdavClientWrite on WebdavClient {
     void Function(int count, int total)? onProgress,
     CancelToken? cancelToken,
   }) async {
-    var file = io.File(localPath);
+    final file = io.File(localPath);
     return writeStream(
       remotePath,
       file.openRead(),

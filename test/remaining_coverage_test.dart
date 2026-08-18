@@ -33,7 +33,7 @@ void main() {
       final client = WebdavClient.noAuth(
         url: 'http://${server.address.host}:${server.port}',
       );
-      expect(() => client.ping(), throwsA(isA<WebdavException>()));
+      expect(client.ping, throwsA(isA<WebdavException>()));
     });
   });
 
@@ -532,7 +532,7 @@ void main() {
 
       final tmpDir = await Directory.systemTemp.createTemp('webdav_progress2_');
       addTearDown(() async {
-        if (await tmpDir.exists()) {
+        if (tmpDir.existsSync()) {
           await tmpDir.delete(recursive: true);
         }
       });

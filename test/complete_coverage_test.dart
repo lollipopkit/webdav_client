@@ -35,7 +35,7 @@ void main() {
       });
       final client = WebdavClient.noAuth(
           url: 'http://${server.address.host}:${server.port}');
-      expect(() => client.ping(), throwsA(isA<WebdavException>()));
+      expect(client.ping, throwsA(isA<WebdavException>()));
     });
   });
 
@@ -83,7 +83,7 @@ void main() {
           url: 'http://${server.address.host}:${server.port}');
       final tmpDir = await Directory.systemTemp.createTemp('wd_compress_');
       addTearDown(() async {
-        if (await tmpDir.exists()) await tmpDir.delete(recursive: true);
+        if (tmpDir.existsSync()) await tmpDir.delete(recursive: true);
       });
 
       int? lastTotal;
@@ -105,7 +105,7 @@ void main() {
           url: 'http://${server.address.host}:${server.port}');
       final tmpDir = await Directory.systemTemp.createTemp('wd_cl_');
       addTearDown(() async {
-        if (await tmpDir.exists()) await tmpDir.delete(recursive: true);
+        if (tmpDir.existsSync()) await tmpDir.delete(recursive: true);
       });
 
       final progress = <(int, int)>[];
@@ -128,7 +128,7 @@ void main() {
           url: 'http://${server.address.host}:${server.port}');
       final tmpDir = await Directory.systemTemp.createTemp('wd_nocl_');
       addTearDown(() async {
-        if (await tmpDir.exists()) await tmpDir.delete(recursive: true);
+        if (tmpDir.existsSync()) await tmpDir.delete(recursive: true);
       });
 
       int? lastTotal;
@@ -158,7 +158,7 @@ void main() {
       final tmpDir = await Directory.systemTemp.createTemp('wd_cancel_');
       addTearDown(() async {
         await controller.close();
-        if (await tmpDir.exists()) await tmpDir.delete(recursive: true);
+        if (tmpDir.existsSync()) await tmpDir.delete(recursive: true);
       });
 
       final cancelToken = CancelToken();
@@ -183,7 +183,7 @@ void main() {
           url: 'http://${server.address.host}:${server.port}');
       final tmpDir = await Directory.systemTemp.createTemp('wd_throw_');
       addTearDown(() async {
-        if (await tmpDir.exists()) await tmpDir.delete(recursive: true);
+        if (tmpDir.existsSync()) await tmpDir.delete(recursive: true);
       });
 
       expect(

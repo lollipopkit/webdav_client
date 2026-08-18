@@ -34,7 +34,7 @@ void main() {
 
       final tmpDir = await Directory.systemTemp.createTemp('wd_stream_');
       addTearDown(() async {
-        if (await tmpDir.exists()) await tmpDir.delete(recursive: true);
+        if (tmpDir.existsSync()) await tmpDir.delete(recursive: true);
       });
 
       await client.readFile('/ok', '${tmpDir.path}/out.bin');

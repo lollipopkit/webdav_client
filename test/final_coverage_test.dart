@@ -30,7 +30,7 @@ void main() {
         url: 'http://${server.address.host}:${server.port}',
       );
 
-      expect(() => client.quota(), throwsA(isA<WebdavException>()));
+      expect(client.quota, throwsA(isA<WebdavException>()));
     });
   });
 
@@ -150,7 +150,7 @@ void main() {
       final tmpDir =
           await Directory.systemTemp.createTemp('webdav_stream_test_');
       addTearDown(() async {
-        if (await tmpDir.exists()) await tmpDir.delete(recursive: true);
+        if (tmpDir.existsSync()) await tmpDir.delete(recursive: true);
       });
 
       final progressList = <int>[];

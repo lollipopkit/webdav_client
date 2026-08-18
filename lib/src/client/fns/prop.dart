@@ -749,7 +749,7 @@ extension WebdavClientPropfind on WebdavClient {
     );
 
     final normalizedTarget = _normalizeHrefForPropFind(path);
-    Map<int, Map<String, XmlElement>>? statusMap = raw[path];
+    var statusMap = raw[path];
     statusMap ??= raw[normalizedTarget];
     statusMap ??= raw[_normalizeHrefForPropFind(normalizedTarget)];
     statusMap ??= raw.entries

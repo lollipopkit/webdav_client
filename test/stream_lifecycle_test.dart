@@ -37,7 +37,7 @@ void main() {
       final tmpDir =
           await Directory.systemTemp.createTemp('wd_stream_timeout_');
       addTearDown(() async {
-        if (await tmpDir.exists()) await tmpDir.delete(recursive: true);
+        if (tmpDir.existsSync()) await tmpDir.delete(recursive: true);
       });
 
       // The timeout should fire after 500ms since the stream never completes
@@ -78,7 +78,7 @@ void main() {
       final tmpDir = await Directory.systemTemp.createTemp('wd_cancel_');
       addTearDown(() async {
         await controller.close();
-        if (await tmpDir.exists()) await tmpDir.delete(recursive: true);
+        if (tmpDir.existsSync()) await tmpDir.delete(recursive: true);
       });
 
       final cancelToken = CancelToken();
@@ -119,7 +119,7 @@ void main() {
 
       final tmpDir = await Directory.systemTemp.createTemp('wd_error_');
       addTearDown(() async {
-        if (await tmpDir.exists()) await tmpDir.delete(recursive: true);
+        if (tmpDir.existsSync()) await tmpDir.delete(recursive: true);
       });
 
       // This should either succeed (data received before close) or throw
@@ -150,7 +150,7 @@ void main() {
 
       final tmpDir = await Directory.systemTemp.createTemp('wd_null_');
       addTearDown(() async {
-        if (await tmpDir.exists()) await tmpDir.delete(recursive: true);
+        if (tmpDir.existsSync()) await tmpDir.delete(recursive: true);
       });
 
       await client.readFile('/ok', '${tmpDir.path}/out.bin');
