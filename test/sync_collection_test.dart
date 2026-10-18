@@ -37,7 +37,7 @@ void main() {
     );
 
     expect(method, 'REPORT');
-    expect(depth, '1');
+    expect(depth, '0');
     expect(body, contains('<d:sync-collection'));
     expect(body, contains('<d:sync-token>token-1</d:sync-token>'));
     expect(body, contains('<d:sync-level>1</d:sync-level>'));
@@ -74,7 +74,7 @@ void main() {
     await client.syncCollection('/collection/', depth: PropsDepth.infinity);
 
     expect(method, 'REPORT');
-    expect(depth, 'infinity');
+    expect(depth, '0');
     expect(body, contains('<d:sync-level>infinite</d:sync-level>'));
   });
 }

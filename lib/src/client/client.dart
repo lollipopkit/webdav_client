@@ -386,8 +386,14 @@ class WebdavClient {
     return report(
       path,
       xmlBuilder.buildDocument().toString(),
-      depth: depth,
-      headers: headers,
+      // RFC 6578 §3.3: the scope is DAV:sync-level; the REPORT is Depth: 0.
+      depth: PropsDepth.zero,
+      headers: headers == null
+          ? null
+          : {
+              for (final entry in headers.entries)
+                if (entry.key.toLowerCase() != 'depth') entry.key: entry.value,
+            },
       cancelToken: cancelToken,
     );
   }
@@ -403,13 +409,14 @@ class WebdavClient {
   }) {
     final xmlBuilder = XmlBuilder();
     xmlBuilder.processing('xml', 'version="1.0" encoding="utf-8"');
-    xmlBuilder.element('d:basicsearch', nest: () {
+    // RFC 5323 §2.3: the grammar sits inside a DAV:searchrequest root.
+    xmlBuilder.element('d:searchrequest', nest: () {
       xmlBuilder.namespaceUri('d', 'DAV:');
       namespaces.forEach((prefix, uri) {
         if (prefix == 'd') return;
         xmlBuilder.namespaceUri(prefix, uri);
       });
-      xmlBuilder.xml(query);
+      xmlBuilder.element('d:basicsearch', nest: () => xmlBuilder.xml(query));
     });
     return search(
       path,

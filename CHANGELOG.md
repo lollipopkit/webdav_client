@@ -19,6 +19,13 @@
 
 ### Fixed
 
+- `syncCollection` sends `Depth: 0` as RFC 6578 §3.3 requires, even when the
+  caller passes a `Depth` header; the `depth` argument only sets
+  `DAV:sync-level`.
+- `basicSearch` wraps the query in the `DAV:searchrequest` root required by
+  RFC 5323 §2.3.
+- `refreshLock` accepts any absolute URI as a lock token, not only
+  `urn:uuid:` and `opaquelocktoken:` ones, and skips `Not` conditions.
 - Digest picks its challenge by auth-scheme, so a `WWW-Authenticate` field
   listing several schemes works, and chooses the strongest supported
   algorithm; a challenge with only unsupported algorithms or qop values fails
