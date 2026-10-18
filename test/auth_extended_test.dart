@@ -268,13 +268,11 @@ void main() {
       expect(values['response'], expected);
     });
 
-    test('unrecognized algorithm defaults to MD5', () {
+    test('unrecognized algorithm sends no credentials', () {
       const header = 'realm="r", nonce="n", qop="auth", algorithm=UNKNOWN';
       final parts = DigestParts(header);
       final auth = DigestAuth(user: 'u', pwd: 'p', digestParts: parts);
-      final result = auth.authorize('GET', '/');
-      expect(result, startsWith('Digest'));
-      expect(result, contains('algorithm=UNKNOWN'));
+      expect(auth.authorize('GET', '/'), isNull);
     });
 
     test('empty algorithm defaults to MD5', () {

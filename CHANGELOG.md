@@ -14,7 +14,8 @@
 ### Breaking
 
 - `Auth.authorize` takes an optional `body` and `DigestAuth.authorize` returns
-  `String?` (`null` before a challenge is known).
+  `String?`: `null` before a challenge is known or when its algorithm is not
+  supported, instead of an MD5 response.
 
 ### Fixed
 
@@ -24,7 +25,8 @@
   silently using MD5. `qop=auth-int` hashes the actual request body.
 - `readFile` reports a 401 as `WebdavException` instead of `StateError`, no
   longer limits the whole download to `receiveTimeout`, and removes the
-  partial file when writing it fails. `readFile` and `readStream` read the
+  partial file when writing it fails. When the local file cannot be created,
+  the response body is cancelled instead of being buffered by dio. `readFile` and `readStream` read the
   body of an unsuccessful response into the exception, releasing the
   connection.
 - A 303 turns the request into a GET without entity headers and keeps HEAD as

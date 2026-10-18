@@ -692,6 +692,10 @@ class _WdDio with DioMixin {
     void Function(int count, int total)? onProgress,
     CancelToken? cancelToken,
   }) async {
+    // Cancelling is the only way to make dio drop an unread body, so keep a
+    // token of our own that follows the caller's.
+    final bodyToken = CancelToken();
+    cancelToken?.whenCancel.then((e) => bodyToken.cancel(e.error)).ignore();
     final resp = await req<ResponseBody>(
       'GET',
       path,
@@ -701,7 +705,7 @@ class _WdDio with DioMixin {
         }
         options.responseType = ResponseType.stream;
       },
-      cancelToken: cancelToken,
+      cancelToken: bodyToken,
     );
     if (!_isSuccessfulReadStatus(resp.statusCode)) {
       throw await _streamResponseError(resp);
@@ -714,11 +718,16 @@ class _WdDio with DioMixin {
 
     resp.headers = Headers.fromMap(respData.headers);
 
-    // If directory (or file) doesn't exist yet, the entire method fails
     final file = File(savePath);
-    await file.create(recursive: true);
-
-    final fileReader = await file.open(mode: FileMode.write);
+    final RandomAccessFile fileReader;
+    try {
+      await file.create(recursive: true);
+      fileReader = await file.open(mode: FileMode.write);
+    } catch (_) {
+      // Release the connection the unread body would otherwise hold.
+      bodyToken.cancel('Local file could not be opened');
+      rethrow;
+    }
 
     //Create a Completer to notify the success/error state.
     final completer = Completer<Response<ResponseBody>>();

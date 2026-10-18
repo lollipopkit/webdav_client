@@ -149,8 +149,9 @@ final class DigestAuth extends Auth {
     String path, {
     List<int> body = const [],
   }) {
-    // Without a challenge the response hash only exposes the password.
-    if (nonce?.isNotEmpty != true) return null;
+    // Without a challenge the response hash only exposes the password, and
+    // an unsupported algorithm must not silently fall back to MD5.
+    if (nonce?.isNotEmpty != true || algorithmRank(algorithm) < 0) return null;
     digestParts.uri = path;
     digestParts.method = method;
     return _getDigestAuthorization(body);

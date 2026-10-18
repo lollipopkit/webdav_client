@@ -152,6 +152,24 @@ void main() {
       );
     });
 
+    test('readFile fails cleanly when the local file cannot be created',
+        () async {
+      final server = await _serve((request) async {
+        request.response.add(Uint8List(1024));
+        await request.response.close();
+      });
+      final dir = await Directory.systemTemp.createTemp('read_file_fs_');
+      addTearDown(() => dir.delete(recursive: true));
+      // A regular file in place of a directory makes create() fail.
+      await File('${dir.path}/blocker').create();
+
+      await expectLater(
+        WebdavClient.noAuth(url: _url(server))
+            .readFile('/f', '${dir.path}/blocker/out'),
+        throwsA(isA<FileSystemException>()),
+      );
+    });
+
     test('readFile applies receiveTimeout between chunks', () async {
       final server = await _serve((request) async {
         request.response
