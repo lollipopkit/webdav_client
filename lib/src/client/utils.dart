@@ -408,6 +408,30 @@ extension _Utils on WebdavClient {
     return path;
   }
 
+  /// Parse a PROPFIND Multi-Status body with [parse], reporting a missing or
+  /// malformed body as a [WebdavException].
+  T _parsePropfind<T>(Response<String> resp, T Function(String body) parse) {
+    final body = resp.data;
+    if (body == null || body.trim().isEmpty) {
+      throw WebdavException(
+        message: 'PROPFIND response did not include a multi-status body',
+        statusCode: resp.statusCode,
+        statusMessage: resp.statusMessage,
+        response: resp,
+      );
+    }
+    try {
+      return parse(body);
+    } on XmlException catch (error) {
+      throw WebdavException(
+        message: 'Unable to parse PROPFIND response: $error',
+        statusCode: resp.statusCode,
+        statusMessage: resp.statusMessage,
+        response: resp,
+      );
+    }
+  }
+
   void _ensurePropPatchSuccess(Response<String> resp) {
     final status = resp.statusCode ?? 0;
     if (status < 200 || status >= 300) {

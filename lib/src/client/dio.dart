@@ -17,6 +17,16 @@ class _WdDio with DioMixin {
     this.options.validateStatus = (status) => true;
 
     httpClientAdapter = getAdapter();
+    // A composed content-type cannot be unset through Options, only on the
+    // final RequestOptions.
+    interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) {
+        if (options.extra.remove(_dropContentTypeKey) == true) {
+          options.contentType = null;
+        }
+        handler.next(options);
+      },
+    ));
   }
 
   /// Issue an HTTP request using WebDAV-aware defaults.
@@ -124,14 +134,8 @@ class _WdDio with DioMixin {
                   response: resp,
                 );
               }
-              // Create a new DigestAuth instance with the new challenge
-              client.auth = DigestAuth(
-                user: digestAuth.user,
-                pwd: digestAuth.pwd,
-                digestParts: DigestParts(digestHeader),
-              );
-
-              // Stream bodies cannot be retried.
+              // Stream bodies cannot be retried, so leave the client's auth
+              // untouched rather than commit a challenge no retry used.
               if (data is Stream) {
                 throw WebdavException(
                   message: 'Cannot retry streamed request after 401; '
@@ -140,6 +144,11 @@ class _WdDio with DioMixin {
                   response: resp,
                 );
               }
+              client.auth = DigestAuth(
+                user: digestAuth.user,
+                pwd: digestAuth.pwd,
+                digestParts: DigestParts(digestHeader),
+              );
               // Retry the request
               return req(
                 method,
@@ -246,6 +255,12 @@ class _WdDio with DioMixin {
                   options.headers?.removeWhere(
                     (key, _) => _entityHeaders.contains(key.toLowerCase()),
                   );
+                  // Null overrides the client-wide headers dio merges in;
+                  // content-type is dropped by the interceptor instead.
+                  for (final key in _entityHeaders) {
+                    if (key != 'content-type') options.headers?[key] = null;
+                  }
+                  options.extra = {...?options.extra, _dropContentTypeKey: true};
                 }
               : optionsHandler,
           onSendProgress: onSendProgress,
@@ -770,12 +785,16 @@ class _WdDio with DioMixin {
 
     Future<void> closeAndDelete({bool awaitWrite = true}) =>
         closing ??= () async {
-          if (awaitWrite) await asyncWrite;
-          await fileReader.close();
           try {
-            await file.delete();
-          } on PathNotFoundException {
-            // The caller may have removed the partial download already.
+            if (awaitWrite) await asyncWrite;
+            await fileReader.close();
+          } finally {
+            // Delete even when closing failed, so no partial file remains.
+            try {
+              await file.delete();
+            } on PathNotFoundException {
+              // The caller may have removed the partial download already.
+            }
           }
         }();
 
@@ -1115,6 +1134,8 @@ const _parentMkcolFilteredHeaders = <String>{
   ..._putTargetConditionHeaders,
   ..._entityHeaders,
 };
+
+const _dropContentTypeKey = 'webdav_client_plus.dropContentType';
 
 const _sensitiveRedirectHeaders = <String>{
   'authorization',

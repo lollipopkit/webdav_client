@@ -31,5 +31,4 @@
 build/
 pubspec.lock
 
-.test
 code.txt

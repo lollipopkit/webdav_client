@@ -737,10 +737,17 @@ extension WebdavClientPropfind on WebdavClient {
       cancelToken: cancelToken,
     );
 
-    // Keys are decoded server hrefs, which carry the base URL's path.
-    final target = _hrefPathKey(decodeHref(Uri.parse(absoluteUrl(path)).path));
+    // Keys are server hrefs decoded once, which carry the base URL's path.
+    // `Uri.path` stays percent-encoded, so decoding it here is the single
+    // decode for the target too (see the `/a%2520b` test).
+    final targetUri = Uri.parse(absoluteUrl(path));
+    final target = _hrefPathKey(decodeHref(targetUri.path));
     final statusMap = raw.entries
-        .firstWhereOrNull((entry) => _hrefPathKey(entry.key) == target)
+        .firstWhereOrNull(
+          (entry) =>
+              _hrefOriginMatches(entry.key, targetUri) &&
+              _hrefPathKey(entry.key) == target,
+        )
         ?.value;
     if (statusMap == null) {
       return const <String, XmlElement>{};
@@ -860,15 +867,7 @@ extension WebdavClientPropfind on WebdavClient {
       headers: headers,
     );
 
-    final str = resp.data;
-    if (str == null) {
-      throw WebdavException(
-        message: 'No data returned',
-        statusCode: resp.statusCode,
-      );
-    }
-
-    final rawMap = parseMultiStatusToMap(str);
+    final rawMap = _parsePropfind(resp, parseMultiStatusToMap);
     if (rawMap.isEmpty) {
       return const {};
     }
@@ -912,6 +911,22 @@ List<String> _hrefList(XmlElement? element) {
 }
 
 final _schemeAuthorityReg = RegExp('^[A-Za-z][A-Za-z0-9+.-]*://[^/]*');
+
+/// Whether an absolute [decodedHref] names the same origin as [target]; a
+/// path-only href always does.
+bool _hrefOriginMatches(String decodedHref, Uri target) {
+  final origin = _schemeAuthorityReg.firstMatch(decodedHref)?[0];
+  if (origin == null) return true;
+  final Uri uri;
+  try {
+    uri = Uri.parse(origin);
+  } on FormatException {
+    return false;
+  }
+  return uri.scheme == target.scheme.toLowerCase() &&
+      uri.host == target.host.toLowerCase() &&
+      uri.port == target.port;
+}
 
 /// Path of a decoded href without scheme, authority or trailing slash.
 String _hrefPathKey(String decodedHref) {

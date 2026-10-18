@@ -17,8 +17,19 @@
   `String?`: `null` before a challenge is known or when its algorithm is not
   supported, instead of an MD5 response.
 
+### Added
+
+- The library re-exports the dio and xml types used in its public API
+  (`CancelToken`, `DioException`, `DioExceptionType`, `Options`,
+  `ProgressCallback`, `Response`, `ResponseBody`, `ResponseType`, `XmlElement`
+  and its find/string extensions), so callers no longer need direct `dio` /
+  `xml` dependencies.
+
 ### Fixed
 
+- `readDir`, `readProps`, `propFind` and `quotaBytes` report a PROPFIND
+  response with an empty or malformed body as `WebdavException` instead of
+  leaking an `XmlParserException` (or a cast error from `quotaBytes`).
 - `syncCollection` sends `Depth: 0` as RFC 6578 §3.3 requires, even when the
   caller passes a `Depth` header; the `depth` argument only sets
   `DAV:sync-level`.
@@ -30,16 +41,18 @@
   listing several schemes works, and chooses the strongest supported
   algorithm; a challenge with only unsupported algorithms or qop values fails
   instead of silently using MD5 or the qop-less formula. `qop=auth-int` hashes
-  the actual request body.
+  the actual request body. A streamed request that cannot be retried after a
+  401 leaves the client's Digest state unchanged.
 - `readFile` reports a 401 as `WebdavException` instead of `StateError`, no
   longer limits the whole download to `receiveTimeout`, and removes the
   partial file when writing it fails. When the local file cannot be created,
   the response body is cancelled instead of being buffered by dio. On timeout
-  or cancellation the partial file is removed before the error is thrown. `readFile` and `readStream` read the
+  or cancellation the partial file is removed before the error is thrown, even
+  when closing it fails. `readFile` and `readStream` read the
   body of an unsuccessful response into the exception, releasing the
   connection.
-- A 303 turns the request into a GET without entity headers and keeps HEAD as
-  HEAD. A `Location` that cannot be parsed is no longer followed in a loop,
+- A 303 turns the request into a GET without entity headers, including ones
+  set through `setHeaders`, and keeps HEAD as HEAD. A `Location` that cannot be parsed is no longer followed in a loop,
   and a redirect that is not followed keeps its body for the caller.
 - COPY/MOVE retries a 409 once after creating the parent instead of looping,
   and no longer sends the `If` header and conditions to the parent MKCOL.
@@ -65,7 +78,8 @@
   and two-digit RFC 850 years follow RFC 9110 §5.6.7.
 - `propFind` finds the target under a base path at `Depth: 1` instead of
   returning an empty map, and no longer returns the properties of another
-  resource when the response holds a single entry.
+  resource when the response holds a single entry or names it by an absolute
+  href on another origin.
 - Absolute `HTTP://` and `HTTPS://` targets are recognised regardless of
   scheme case instead of being resolved as paths.
 - `modifyProps` no longer gives set and remove properties in different

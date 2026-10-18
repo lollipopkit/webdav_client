@@ -32,16 +32,11 @@ extension WebdavClientRead on WebdavClient {
       headers: headers,
     );
 
-    final str = resp.data;
-    if (str == null) {
-      throw WebdavException(
-        message: 'No data returned',
-        statusCode: resp.statusCode,
-      );
-    }
-
     // Hrefs include the base URL's path, so compare against the resolved URL.
-    return WebdavFile.parseFiles(absoluteUrl(path), str);
+    return _parsePropfind(
+      resp,
+      (body) => WebdavFile.parseFiles(absoluteUrl(path), body),
+    );
   }
 
   /// Read a single files properties
@@ -73,15 +68,10 @@ extension WebdavClientRead on WebdavClient {
       headers: headers,
     );
 
-    final str = resp.data;
-    if (str == null) {
-      throw WebdavException(
-        message: 'No data returned',
-        statusCode: resp.statusCode,
-      );
-    }
-
-    return WebdavFile.parseFiles(path, str, skipSelf: false).firstOrNull;
+    return _parsePropfind(
+      resp,
+      (body) => WebdavFile.parseFiles(path, body, skipSelf: false).firstOrNull,
+    );
   }
 
   /// Read the bytes of a file

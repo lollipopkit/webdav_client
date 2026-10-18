@@ -4,7 +4,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
-import 'package:dio/dio.dart' show ResponseBody, ResponseType;
 import 'package:test/test.dart';
 import 'package:webdav_client_plus/src/internal/auth_challenge.dart';
 import 'package:webdav_client_plus/webdav_client_plus.dart';
@@ -118,6 +117,28 @@ void main() {
         configure: (options) => options.headers?['content-length'] = 100,
       );
       expect(requests, ['PUT /f 100', 'GET /done -1']);
+    });
+
+    test('drops client-wide entity headers on the GET', () async {
+      final seen = <String, String>{};
+      final server = await _serve((request) async {
+        await request.drain<void>();
+        seen[request.method] = [
+          request.headers.value('content-type'),
+          request.headers.value('content-language'),
+        ].join(' ');
+        if (request.method == 'PUT') {
+          request.response
+            ..statusCode = HttpStatus.seeOther
+            ..headers.set('Location', '/done');
+        }
+        await request.response.close();
+      });
+
+      final client = WebdavClient.noAuth(url: _url(server))
+        ..setHeaders({'Content-Type': 'text/plain', 'Content-Language': 'en'});
+      await client.request<String>('PUT', target: '/f', data: 'x');
+      expect(seen, {'PUT': 'text/plain en', 'GET': 'null null'});
     });
 
     test('keeps HEAD as HEAD', () async {
@@ -252,6 +273,24 @@ void main() {
       final params = _digestParams(auths.single);
       expect(params['realm'], 'r2');
       expect(params['nonce'], 'n1');
+    });
+
+    test('a streamed body leaves the client auth unchanged on 401', () async {
+      final server = await _serve((request) async {
+        await request.drain<void>();
+        request.response
+          ..statusCode = HttpStatus.unauthorized
+          ..headers.set('WWW-Authenticate', 'Digest realm="r", nonce="n"');
+        await request.response.close();
+      });
+
+      final auth = digest();
+      final client = WebdavClient(url: _url(server), auth: auth);
+      await expectLater(
+        client.writeStream('/f', Stream.value([1, 2, 3]), 3),
+        throwsA(isA<WebdavException>()),
+      );
+      expect(client.auth, same(auth));
     });
 
     test('rejects a challenge with only unsupported algorithms', () async {
