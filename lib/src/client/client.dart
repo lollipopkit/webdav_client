@@ -386,7 +386,12 @@ class WebdavClient {
       xmlBuilder.buildDocument().toString(),
       // RFC 6578 §3.3: the scope is DAV:sync-level; the REPORT is Depth: 0.
       depth: PropsDepth.zero,
-      headers: headers,
+      headers: headers == null
+          ? null
+          : {
+              for (final entry in headers.entries)
+                if (entry.key.toLowerCase() != 'depth') entry.key: entry.value,
+            },
       cancelToken: cancelToken,
     );
   }

@@ -44,6 +44,12 @@ void main() {
     expect(token, 'urn:x-lock:abc');
   });
 
+  test('syncCollection keeps Depth 0 over a caller Depth header', () async {
+    await client.syncCollection('/c/', headers: {'Depth': '1', 'X-A': 'b'});
+    expect(headers.single['depth'], ['0']);
+    expect(headers.single.value('x-a'), 'b');
+  });
+
   test('basicSearch wraps the query in DAV:searchrequest', () async {
     await client.basicSearch<String>(
       '/',
