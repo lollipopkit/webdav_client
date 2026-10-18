@@ -6,7 +6,15 @@ library;
 
 // Types from dependencies that appear in the public API.
 export 'package:dio/dio.dart'
-    show CancelToken, DioException, DioExceptionType, Response, ResponseBody;
+    show
+        CancelToken,
+        DioException,
+        DioExceptionType,
+        Options,
+        ProgressCallback,
+        Response,
+        ResponseBody,
+        ResponseType;
 export 'package:xml/xml.dart'
     show XmlElement, XmlFindExtension, XmlStringExtension;
 

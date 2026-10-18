@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:dio/dio.dart';
 import 'package:test/test.dart';
 import 'package:webdav_client_plus/webdav_client_plus.dart';
 
@@ -43,8 +42,7 @@ void main() {
     expect(targetPath, '/dir/target');
   });
 
-  test('empty redirect Location falls back to current URI and hits limit',
-      () async {
+  test('empty redirect Location is returned without following', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() async => server.close(force: true));
 
@@ -63,15 +61,13 @@ void main() {
       url: 'http://${server.address.host}:${server.port}',
     );
 
-    await expectLater(
-      client.request<String>(
-        'GET',
-        target: '/loop',
-        configure: (options) => options.responseType = ResponseType.plain,
-      ),
-      throwsA(isA<WebdavException>()),
+    final response = await client.request<String>(
+      'GET',
+      target: '/loop',
+      configure: (options) => options.responseType = ResponseType.plain,
     );
-    expect(count, 11);
+    expect(response.statusCode, HttpStatus.found);
+    expect(count, 1);
   });
 
   test('request fails after too many redirects', () async {

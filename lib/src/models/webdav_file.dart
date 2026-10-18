@@ -1,4 +1,5 @@
 import 'package:webdav_client_plus/src/enums.dart';
+import 'package:webdav_client_plus/src/internal/path_utils.dart';
 import 'package:webdav_client_plus/src/internal/xml_utils.dart';
 import 'package:xml/xml.dart';
 
@@ -81,7 +82,7 @@ class WebdavFile {
   }) {
     final files = <WebdavFile>[];
     final xmlDocument = XmlDocument.parse(xmlStr);
-    final responseElements = findAllElements(xmlDocument, 'response');
+    final responseElements = multiStatusResponses(xmlDocument);
 
     final normalizedBaseHref = skipSelf
         ? _normalizeHrefForComparison(
@@ -91,7 +92,7 @@ class WebdavFile {
         : null;
 
     for (final response in responseElements) {
-      final href = getElementText(response, 'href');
+      final href = hrefText(response);
       if (href == null) continue;
 
       // Find successful propstat element
@@ -99,14 +100,12 @@ class WebdavFile {
       if (propstat == null) continue;
 
       // Find and process prop element
-      final prop = findElements(propstat, 'prop').firstOrNull;
+      final prop = davChild(propstat, 'prop');
       if (prop == null) continue;
-
-      final decodedHref = _decodeHrefValue(href);
 
       if (skipSelf && normalizedBaseHref != null) {
         final normalizedHref = _normalizeHrefForComparison(
-          decodedHref,
+          href,
           treatAsCollection: normalizedBaseHref.endsWith('/'),
         );
         if (normalizedHref == normalizedBaseHref) {
@@ -115,7 +114,7 @@ class WebdavFile {
       }
 
       // Create WebdavFile from prop data
-      final file = parse(path, decodedHref, prop);
+      final file = parse(path, href, prop);
       files.add(file);
     }
 
@@ -125,7 +124,7 @@ class WebdavFile {
   /// Create a WebdavFile object from prop data
   ///
   /// - [basePath] is the base path of the files
-  /// - [href] is the href of the file
+  /// - [href] is the href of the file as sent by the server (percent-encoded)
   /// - [prop] is the prop element of the file
   static WebdavFile parse(
     String basePath,
@@ -135,23 +134,19 @@ class WebdavFile {
     final isDir = _isDirectory(prop);
 
     // Extract properties
-    final mimeType = getElementText(prop, 'getcontenttype');
-    final eTag = getElementText(prop, 'getetag');
-    final size = isDir ? null : getIntValue(prop, 'getcontentlength');
+    final mimeType = _davText(prop, 'getcontenttype');
+    final eTag = _davText(prop, 'getetag');
+    final size = isDir ? null : _davInt(prop, 'getcontentlength');
 
-    // Created time
-    final cTimeStr = getElementText(prop, 'creationdate')?.trim();
-    final parsedCreation =
-        cTimeStr != null ? DateTime.tryParse(cTimeStr) : null;
-    final cTime = parsedCreation?.toLocal();
+    // RFC 4918 §15.1 specifies RFC 3339, but some servers send HTTP dates.
+    final cTimeStr = _davText(prop, 'creationdate');
+    final cTime = _parseIsoDate(cTimeStr) ?? _parseHttpDate(cTimeStr);
 
-    // Modified time
-    final mTimeStr = getElementText(prop, 'getlastmodified');
-    final mTime = _parseHttpDate(mTimeStr);
+    final mTime = _parseHttpDate(_davText(prop, 'getlastmodified'));
 
     // Path and name
-    final decodedHref = _decodeHrefValue(href);
-    var name = getElementText(prop, 'displayname');
+    final decodedHref = decodeHref(href.trim());
+    var name = _davText(prop, 'displayname');
 
     // If name is not found, extract from path
     if (name == null || name.isEmpty) {
@@ -159,8 +154,8 @@ class WebdavFile {
       name = pathParts.lastWhere((part) => part.isNotEmpty, orElse: () => '/');
     }
 
-    final quotaAvailableBytes = getIntValue(prop, 'quota-available-bytes');
-    final quotaUsedBytes = getIntValue(prop, 'quota-used-bytes');
+    final quotaAvailableBytes = _davInt(prop, 'quota-available-bytes');
+    final quotaUsedBytes = _davInt(prop, 'quota-used-bytes');
 
     // Custom properties
     final customProps = <String, String>{};
@@ -168,8 +163,9 @@ class WebdavFile {
       final localName = element.localName;
       final namespace = element.namespaceUri;
 
-      // Skip common properties
-      if (PropfindType.defaultFindProperties.contains(localName)) {
+      // Skip the DAV: properties exposed as fields
+      if (namespace == 'DAV:' &&
+          PropfindType.defaultFindProperties.contains(localName)) {
         continue;
       }
 
@@ -203,8 +199,8 @@ class WebdavFile {
 
 /// Find the first successful propstat element
 XmlElement? _findSuccessfulPropstat(XmlElement response) {
-  for (final propstat in findElements(response, 'propstat')) {
-    final statusText = getElementText(propstat, 'status');
+  for (final propstat in davChildren(response, 'propstat')) {
+    final statusText = davChild(propstat, 'status')?.innerText;
     if (statusText == null) {
       continue;
     }
@@ -218,11 +214,42 @@ XmlElement? _findSuccessfulPropstat(XmlElement response) {
 }
 
 /// Determine if resource is a directory
-bool _isDirectory(XmlElement prop) {
-  final resourceTypes = findElements(prop, 'resourcetype');
-  return resourceTypes.isNotEmpty &&
-      hasElement(resourceTypes.first, 'collection');
+bool _isDirectory(XmlElement prop) =>
+    prop
+        .getElement('resourcetype', namespaceUri: 'DAV:')
+        ?.getElement('collection', namespaceUri: 'DAV:') !=
+    null;
+
+/// Trimmed text of the DAV: property [name] in [prop], or `null`.
+String? _davText(XmlElement prop, String name) =>
+    prop.getElement(name, namespaceUri: 'DAV:')?.innerText.trim();
+
+int? _davInt(XmlElement prop, String name) {
+  final value = _davText(prop, name);
+  return value != null ? int.tryParse(value) : null;
 }
+
+/// Parse an RFC 3339 date, whose `T` and `Z` may be lowercase (§5.6).
+DateTime? _parseIsoDate(String? value) {
+  if (value == null) return null;
+  final match = _rfc3339.firstMatch(value);
+  if (match == null) return null;
+  int part(int group) => int.parse(match[group]!);
+  final year = part(1);
+  final month = part(2);
+  final day = part(3);
+  // DateTime.parse rolls invalid fields over (Feb 30 becomes Mar 1).
+  if (month < 1 || month > 12) return null;
+  if (day < 1 || day > DateTime.utc(year, month + 1, 0).day) return null;
+  if (part(4) > 23 || part(5) > 59 || part(6) > 59) return null;
+  return DateTime.tryParse(value.toUpperCase())?.toLocal();
+}
+
+/// RFC 3339 §5.6 `date-time`, with `T` and `Z` in either case.
+final _rfc3339 = RegExp(
+  r'^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(?:\.\d+)?'
+  r'(?:[Zz]|[+-](?:[01]\d|2[0-3]):[0-5]\d)$',
+);
 
 /// Parse HTTP date formats accepted by RFC 9110 §5.6.7.
 DateTime? _parseHttpDate(String? httpDate) {
@@ -238,7 +265,10 @@ DateTime? _parseHttpDate(String? httpDate) {
     final day = int.parse(match.group(dayIndex)!);
     var year = int.parse(match.group(yearIndex)!);
     if (year < 100) {
-      year += year >= 70 ? 1900 : 2000;
+      // RFC 9110 §5.6.7: a year more than 50 years ahead is in the past.
+      final now = DateTime.now().toUtc().year;
+      year += now - now % 100;
+      if (year > now + 50) year -= 100;
     }
     final hour = int.parse(match.group(hourIndex)!);
     final minute = int.parse(match.group(minuteIndex)!);
@@ -289,15 +319,7 @@ DateTime? _parseHttpDate(String? httpDate) {
     return parseMatch(asctime, 2, 1, 6, 3, 4, 5);
   }
 
-  return DateTime.tryParse(value)?.toLocal();
-}
-
-String _decodeHrefValue(String href) {
-  try {
-    return Uri.decodeFull(href);
-  } on FormatException {
-    return href;
-  }
+  return _parseIsoDate(value);
 }
 
 const _monthNumbers = {
@@ -367,5 +389,5 @@ String _normalizeHrefForComparison(
   }
 
   // Servers may percent-encode differently than the client did.
-  return _decodeHrefValue(value);
+  return decodeHref(value);
 }

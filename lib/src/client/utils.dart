@@ -60,30 +60,19 @@ List<MultiStatusResponse> parseMultiStatus(String xmlString) {
   final document = XmlDocument.parse(xmlString);
   final responses = <MultiStatusResponse>[];
 
-  for (final responseElement in findAllElements(document, 'response')) {
-    final href = getElementText(responseElement, 'href');
-    final decodedHref =
-        href != null && href.isNotEmpty ? _decodeHref(href) : '';
+  for (final responseElement in multiStatusResponses(document)) {
+    final href = hrefText(responseElement);
+    final decodedHref = href != null ? decodeHref(href) : '';
 
-    final overallStatusElement = responseElement.childElements.firstWhereOrNull(
-      (element) =>
-          element.name.local == 'status' &&
-          element.parentElement == responseElement,
-    );
+    final overallStatusElement = davChild(responseElement, 'status');
     final overallStatusText = overallStatusElement?.innerText;
     final overallStatusCode =
         overallStatusText != null ? parseStatusLine(overallStatusText) : null;
 
-    final errorElement = responseElement.childElements.firstWhereOrNull(
-      (element) => element.name.local == 'error',
-    );
+    final errorElement = davChild(responseElement, 'error');
     final responseDescriptionElement =
-        responseElement.childElements.firstWhereOrNull(
-      (element) => element.name.local == 'responsedescription',
-    );
-    final locationElement = responseElement.childElements.firstWhereOrNull(
-      (element) => element.name.local == 'location',
-    );
+        davChild(responseElement, 'responsedescription');
+    final locationElement = davChild(responseElement, 'location');
 
     String? responseDescription;
     if (responseDescriptionElement != null) {
@@ -95,23 +84,23 @@ List<MultiStatusResponse> parseMultiStatus(String xmlString) {
 
     String? locationHref;
     if (locationElement != null) {
-      final hrefElement = findElements(locationElement, 'href').firstOrNull;
+      final hrefElement = davChild(locationElement, 'href');
       if (hrefElement != null) {
-        final hrefText = hrefElement.innerText;
+        final hrefText = hrefElement.innerText.trim();
         if (hrefText.isNotEmpty) {
-          locationHref = _decodeHref(hrefText);
+          locationHref = decodeHref(hrefText);
         }
       }
     }
 
     final propstats = <MultiStatusPropstat>[];
-    for (final propstatElement in findElements(responseElement, 'propstat')) {
-      final statusElement = findElements(propstatElement, 'status').firstOrNull;
+    for (final propstatElement in davChildren(responseElement, 'propstat')) {
+      final statusElement = davChild(propstatElement, 'status');
       final statusText = statusElement?.innerText;
       final statusCode =
           statusText != null ? parseStatusLine(statusText) : null;
 
-      final propElement = findElements(propstatElement, 'prop').firstOrNull;
+      final propElement = davChild(propstatElement, 'prop');
       final properties = <String, XmlElement>{};
       if (propElement != null) {
         for (final prop in propElement.childElements) {
@@ -186,67 +175,64 @@ Map<String, Map<int, Map<String, XmlElement>>> parseMultiStatusToMap(
   return result;
 }
 
-String _decodeHref(String value) {
-  try {
-    return Uri.decodeFull(value);
-  } on FormatException {
-    return value;
-  }
-}
+List<String> parsePropPatchFailureMessages(String xmlString) =>
+    _multiStatusFailures(
+      xmlString,
+      action: 'update properties for',
+      propsLabel: 'Failed props',
+      alwaysListProps: true,
+    );
 
-List<String> parsePropPatchFailureMessages(String xmlString) {
-  final responses = parseMultiStatus(xmlString);
+List<String> parseMultiStatusFailureMessages(String xmlString) =>
+    _multiStatusFailures(
+      xmlString,
+      action: 'process',
+      propsLabel: 'Props',
+      alwaysListProps: false,
+    );
+
+/// Describe every failed entry of a Multi-Status body. RFC 4918 §14.24 and
+/// §14.22 require a status for each propstat and a status or propstats for
+/// each response, so a missing or unparsable one counts as a failure.
+List<String> _multiStatusFailures(
+  String xmlString, {
+  required String action,
+  required String propsLabel,
+  required bool alwaysListProps,
+}) {
   final failures = <String>[];
 
-  for (final response in responses) {
-    for (final propstat in response.propstats) {
-      final status = propstat.statusCode;
-      if (status != null && status >= 400) {
-        final propNames =
-            propstat.properties.values.map(_formatPropertyName).toList();
-        final statusText = propstat.rawStatus ?? 'HTTP status $status';
-        final description = response.responseDescription;
-        final descriptionSuffix = description == null ? '' : '. $description';
-        failures.add(
-          'Failed to update properties for ${response.href}: '
-          '$statusText. Failed props: $propNames$descriptionSuffix',
-        );
-      }
+  for (final response in parseMultiStatus(xmlString)) {
+    final description = response.responseDescription;
+    final descriptionSuffix = description == null ? '' : '. $description';
+
+    String? failedStatus(int? code, String? raw) {
+      if (code != null) return code >= 400 ? raw ?? 'HTTP status $code' : null;
+      return raw == null ? 'missing status' : 'invalid status "$raw"';
     }
-  }
 
-  return failures;
-}
-
-List<String> parseMultiStatusFailureMessages(String xmlString) {
-  final responses = parseMultiStatus(xmlString);
-  final failures = <String>[];
-
-  for (final response in responses) {
-    final status = response.statusCode;
-    if (status != null && status >= 400) {
-      final statusText = response.rawStatus ?? 'HTTP status $status';
-      final description = response.responseDescription;
-      final descriptionSuffix = description == null ? '' : '. $description';
+    final responseFailure =
+        response.rawStatus != null || response.propstats.isEmpty
+            ? failedStatus(response.statusCode, response.rawStatus)
+            : null;
+    if (responseFailure != null) {
       failures.add(
-        'Failed to process ${response.href}: $statusText$descriptionSuffix',
+        'Failed to $action ${response.href}: $responseFailure'
+        '$descriptionSuffix',
       );
     }
 
     for (final propstat in response.propstats) {
-      final statusCode = propstat.statusCode;
-      if (statusCode == null || statusCode < 400) {
-        continue;
-      }
-      final statusText = propstat.rawStatus ?? 'HTTP status $statusCode';
+      final propstatFailure =
+          failedStatus(propstat.statusCode, propstat.rawStatus);
+      if (propstatFailure == null) continue;
       final props =
           propstat.properties.values.map(_formatPropertyName).toList();
-      final propsSuffix = props.isEmpty ? '' : '. Props: $props';
-      final description = response.responseDescription;
-      final descriptionSuffix = description == null ? '' : '. $description';
+      final propsSuffix =
+          props.isEmpty && !alwaysListProps ? '' : '. $propsLabel: $props';
       failures.add(
-        'Failed to process ${response.href}: '
-        '$statusText$propsSuffix$descriptionSuffix',
+        'Failed to $action ${response.href}: '
+        '$propstatFailure$propsSuffix$descriptionSuffix',
       );
     }
   }
@@ -281,8 +267,9 @@ extension _Utils on WebdavClient {
           activeLock.findElements('locktoken', namespaceUri: '*');
       for (final lockToken in lockTokenElements) {
         final href = lockToken.findElements('href', namespaceUri: '*').firstOrNull;
-        if (href != null && href.innerText.isNotEmpty) {
-          return href.innerText;
+        final token = href?.innerText.trim();
+        if (token != null && token.isNotEmpty) {
+          return token;
         }
       }
     }
@@ -292,15 +279,16 @@ extension _Utils on WebdavClient {
         document.findAllElements('locktoken', namespaceUri: '*');
     for (final lockToken in lockTokenElements) {
       final href = lockToken.findElements('href', namespaceUri: '*').firstOrNull;
-      if (href != null && href.innerText.isNotEmpty) {
-        return href.innerText;
+      final token = href?.innerText.trim();
+      if (token != null && token.isNotEmpty) {
+        return token;
       }
     }
 
     // Try
     final hrefElements = document.findAllElements('href', namespaceUri: '*');
     for (final href in hrefElements) {
-      final text = href.innerText;
+      final text = href.innerText.trim();
       if (text.startsWith('urn:uuid:') || text.startsWith('opaquelocktoken:')) {
         return text;
       }
@@ -335,15 +323,15 @@ extension _Utils on WebdavClient {
     return '<$trimmed>';
   }
 
+  /// First state token in the If header's lists (RFC 4918 §10.4.2). Any
+  /// absolute URI is a valid lock token; resource tags outside the lists and
+  /// `Not` conditions are skipped.
   String? _extractLockTokenFromIfHeader(String ifHeader) {
-    final regex = RegExp('<([^>]+)>');
-    final matches = regex.allMatches(ifHeader);
-    for (final match in matches) {
-      final token = match.group(1);
-      if (token != null &&
-          (token.startsWith('urn:uuid:') ||
-              token.startsWith('opaquelocktoken:'))) {
-        return token;
+    final lists = RegExp(r'\(([^)]*)\)').allMatches(ifHeader);
+    for (final list in lists) {
+      final conditions = RegExp(r'(Not\s+)?<([^>]+)>').allMatches(list[1]!);
+      for (final condition in conditions) {
+        if (condition[1] == null) return condition[2]!.trim();
       }
     }
     return null;

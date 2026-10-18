@@ -125,7 +125,7 @@ extension WebdavClientRead on WebdavClient {
     );
 
     if (resp.statusCode != 200 && resp.statusCode != 206) {
-      throw _newResponseError(resp);
+      throw await _client._streamResponseError(resp);
     }
     if (resp.data == null) {
       throw _newResponseError(resp, 'Response data is null');

@@ -2,20 +2,87 @@
 
 ## [Unreleased]
 
+### Security
+
+- Cross-origin redirects now drop `Authorization`, `Cookie` and
+  `Proxy-Authorization` set through `setHeaders`, not only per-request ones,
+  and keep dropping them on later same-origin hops.
+- `DigestAuth` no longer sends an `Authorization` header before the server's
+  first challenge; that header carried a response hash computed without a
+  nonce.
+
+### Breaking
+
+- `Auth.authorize` takes an optional `body` and `DigestAuth.authorize` returns
+  `String?`: `null` before a challenge is known or when its algorithm is not
+  supported, instead of an MD5 response.
+
 ### Added
 
 - The library re-exports the dio and xml types used in its public API
-  (`CancelToken`, `DioException`, `DioExceptionType`, `Response`,
-  `ResponseBody`, `XmlElement` and its find/string extensions), so callers no
-  longer need direct `dio` / `xml` dependencies.
+  (`CancelToken`, `DioException`, `DioExceptionType`, `Options`,
+  `ProgressCallback`, `Response`, `ResponseBody`, `ResponseType`, `XmlElement`
+  and its find/string extensions), so callers no longer need direct `dio` /
+  `xml` dependencies.
 
 ### Fixed
 
+- `syncCollection` sends `Depth: 0` as RFC 6578 §3.3 requires, even when the
+  caller passes a `Depth` header; the `depth` argument only sets
+  `DAV:sync-level`.
+- `basicSearch` wraps the query in the `DAV:searchrequest` root required by
+  RFC 5323 §2.3.
+- `refreshLock` accepts any absolute URI as a lock token, not only
+  `urn:uuid:` and `opaquelocktoken:` ones, and skips `Not` conditions.
+- Digest picks its challenge by auth-scheme, so a `WWW-Authenticate` field
+  listing several schemes works, and chooses the strongest supported
+  algorithm; a challenge with only unsupported algorithms or qop values fails
+  instead of silently using MD5 or the qop-less formula. `qop=auth-int` hashes
+  the actual request body.
+- `readFile` reports a 401 as `WebdavException` instead of `StateError`, no
+  longer limits the whole download to `receiveTimeout`, and removes the
+  partial file when writing it fails. When the local file cannot be created,
+  the response body is cancelled instead of being buffered by dio. On timeout
+  or cancellation the partial file is removed before the error is thrown. `readFile` and `readStream` read the
+  body of an unsuccessful response into the exception, releasing the
+  connection.
+- A 303 turns the request into a GET without entity headers and keeps HEAD as
+  HEAD. A `Location` that cannot be parsed is no longer followed in a loop,
+  and a redirect that is not followed keeps its body for the caller.
+- COPY/MOVE retries a 409 once after creating the parent instead of looping,
+  and no longer sends the `If` header and conditions to the parent MKCOL.
+- Download progress treats any `Content-Encoding` other than `identity` as
+  compressed.
 - `readDir` no longer returns the requested collection itself when the base
   URL has a path (e.g. `/remote.php/dav/files/<user>`). Hrefs are now compared
   against the resolved request URL, ignoring percent-encoding differences.
 - `DAV:status` values are only accepted as HTTP status-lines, so text such as
   `error 200` no longer marks a propstat as successful.
+- Hrefs are decoded exactly once and kept as sent when they are not valid
+  percent-encoding, so a bare `%` no longer makes `readDir` throw and
+  `%2541` is no longer read as `A`. Raw non-ASCII characters in hrefs are
+  kept instead of making parsing throw. Surrounding whitespace is trimmed from
+  hrefs and lock tokens.
+- Multi-Status parsing only reads the `DAV:response` children of the root, so
+  property values containing `response` elements no longer add phantom
+  entries. Response, propstat and status elements must be in `DAV:`.
+- `WebdavFile` reads its fields from `DAV:` properties only; a same-named
+  property in another namespace stays in `customProps`. `creationdate` also
+  accepts HTTP dates and lowercase RFC 3339, rejects dates outside the
+  RFC 3339 grammar or calendar (such as Feb 30) instead of rolling them over,
+  and two-digit RFC 850 years follow RFC 9110 §5.6.7.
+- `propFind` finds the target under a base path at `Depth: 1` instead of
+  returning an empty map, and no longer returns the properties of another
+  resource when the response holds a single entry.
+- Absolute `HTTP://` and `HTTPS://` targets are recognised regardless of
+  scheme case instead of being resolved as paths.
+- `modifyProps` no longer gives set and remove properties in different
+  namespaces the same prefix, which sent the wrong property.
+- `setProps`, `modifyProps` and `propPatch` throw when a 207 carries a
+  response-level error status. PROPPATCH, COPY and MOVE treat as failed a
+  propstat whose `DAV:status` is missing or unparsable, a response whose own
+  `DAV:status` is unparsable, and a response with neither a status nor
+  propstats.
 
 ## [2.0.0]
 

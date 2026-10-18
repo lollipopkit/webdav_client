@@ -45,6 +45,7 @@ void main() {
         client.readFile('/slow', out.path),
         throwsA(isA<WebdavException>()),
       );
+      expect(out.existsSync(), isFalse);
     });
   });
 
@@ -89,8 +90,12 @@ void main() {
       final out = File('${tmpDir.path}/out.bin');
       await expectLater(
         client.readFile('/cancel', out.path, cancelToken: cancelToken),
-        throwsA(anything),
+        throwsA(
+          isA<DioException>()
+              .having((e) => e.type, 'type', DioExceptionType.cancel),
+        ),
       );
+      expect(out.existsSync(), isFalse);
     });
   });
 
