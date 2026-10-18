@@ -2,8 +2,24 @@ import 'package:test/test.dart';
 import 'package:webdav_client_plus/src/internal/hash_utils.dart';
 import 'package:webdav_client_plus/src/internal/path_utils.dart';
 import 'package:webdav_client_plus/src/internal/property_resolution.dart';
+import 'package:webdav_client_plus/src/internal/xml_utils.dart';
 
 void main() {
+  group('parseStatusLine', () {
+    test('reads the code of an HTTP status-line', () {
+      expect(parseStatusLine('HTTP/1.1 200 OK'), 200);
+      expect(parseStatusLine(' HTTP/2 404 '), 404);
+      expect(parseStatusLine('HTTP/1.1 207'), 207);
+    });
+
+    test('rejects text that is not a status-line', () {
+      expect(parseStatusLine('error 200'), isNull);
+      expect(parseStatusLine('HTTP/1.1 4040'), isNull);
+      expect(parseStatusLine('No-Code-Here'), isNull);
+      expect(parseStatusLine(''), isNull);
+    });
+  });
+
   group('hash_utils', () {
     test('sha512Hash produces correct digest', () {
       final hash = sha512Hash('hello');

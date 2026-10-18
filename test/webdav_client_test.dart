@@ -12,24 +12,26 @@ const _testDir2 = 'test dir2';
 const _testFile = 'README.md';
 const _testFile2 = 'README2.md';
 
-final _dufsSkipReason = _computeDufsSkipReason();
+const _davPrefix = '/dav';
+
+final _dockerSkipReason = _computeDockerSkipReason();
 
 void main() {
   group('Basic', () {
     late WebdavClient client;
-    late _DufsServer dufsServer;
+    late _ApacheServer server;
 
     setUpAll(() async {
-      dufsServer = await _startDufsServer();
+      server = await _startApacheServer();
       client = WebdavClient.basicAuth(
-        url: 'http://127.0.0.1:${dufsServer.port}',
+        url: server.url,
         user: 'test',
         pwd: 'test',
       );
     });
 
     tearDownAll(() async {
-      await dufsServer.dispose();
+      await server.dispose();
     });
 
     setUp(() async {
@@ -49,6 +51,9 @@ void main() {
       } catch (e) {
         print('$e');
       }
+
+      await client.removeAll('/$_testDir');
+      await client.removeAll('/$_testDir2');
     });
 
     test('mkdir', () async {
@@ -83,11 +88,35 @@ void main() {
       expect(listRootDir.isNotEmpty, isTrue);
 
       final listTestDir = await client.readDir(_testDir);
-      expect(listTestDir.firstOrNull?.name, _testFile);
+      expect(listTestDir.map((f) => f.name), [_testFile]);
+    });
+
+    test('list excludes self under a base path', () async {
+      await client.mkdirAll('/$_testDir/sub');
+
+      final files = await client.readDir('/$_testDir');
+      expect(files.map((f) => f.path), ['$_davPrefix/$_testDir/sub/']);
+    });
+
+    test('list with infinite depth', () async {
+      await client.mkdirAll('/$_testDir/a/b');
+      await client.writeFile(_testFile, '/$_testDir/a/b/$_testFile');
+
+      final files = await client.readDir(_testDir, depth: PropsDepth.infinity);
+      expect(
+        files.map((f) => f.path),
+        unorderedEquals([
+          '$_davPrefix/$_testDir/a/',
+          '$_davPrefix/$_testDir/a/b/',
+          '$_davPrefix/$_testDir/a/b/$_testFile',
+        ]),
+      );
     });
 
     test('rename', () async {
       await client.mkdir(_testDir);
+      // Apache answers MOVE into a missing parent with 500 rather than 409.
+      await client.mkdir(_testDir2);
       await client.writeFile(_testFile, '/$_testDir/$_testFile');
 
       await client.rename(
@@ -243,7 +272,9 @@ void main() {
       );
 
       expect(
-        () => client.lock('/non-existent-file.txt'),
+        // Locking an unmapped URL creates it (RFC 4918 §7.3); a missing
+        // parent must still fail.
+        () => client.lock('/non-existent-dir/file.txt'),
         throwsA(isA<WebdavException<Object>>()),
       );
     });
@@ -262,7 +293,7 @@ void main() {
         throwsA(anything),
       );
     });
-  }, skip: _dufsSkipReason);
+  }, skip: _dockerSkipReason);
 
   test('Invalid URL', () async {
     final invalidClient = WebdavClient.noAuth(url: 'http://invalid-url');
@@ -273,90 +304,93 @@ void main() {
   });
 }
 
-class _DufsServer {
-  _DufsServer(this._process, this.rootDirectory, this.port);
+class _ApacheServer {
+  _ApacheServer(this._containerName, this.port);
 
-  final Process _process;
-  final Directory rootDirectory;
+  final String _containerName;
   final int port;
 
+  String get url => 'http://127.0.0.1:$port$_davPrefix';
+
   Future<void> dispose() async {
-    _process.kill();
-    await _process.exitCode;
-    if (rootDirectory.existsSync()) {
-      await rootDirectory.delete(recursive: true);
-    }
+    await Process.run('docker', ['rm', '-f', _containerName]);
   }
 }
 
-String? _computeDufsSkipReason() {
+String? _computeDockerSkipReason() {
   try {
-    final result = Process.runSync('dufs', const ['--version']);
+    final result = Process.runSync('docker', const ['info']);
     if (result.exitCode != 0) {
-      final stderrOutput = (result.stderr as String?)?.trim();
-      return 'dufs is required for WebDAV integration tests '
-          '(exit ${result.exitCode}${stderrOutput?.isEmpty ?? true ? '' : ': $stderrOutput'})';
+      return 'docker is required for WebDAV integration tests '
+          '(exit ${result.exitCode})';
     }
   } on ProcessException catch (e) {
-    return 'dufs is required for WebDAV integration tests (${e.message})';
+    return 'docker is required for WebDAV integration tests (${e.message})';
   }
   return null;
 }
 
-Future<_DufsServer> _startDufsServer() async {
-  final serveDir = await Directory.systemTemp.createTemp('dufs_webdav_');
-  final port = await _allocatePort();
-  final process = await Process.start(
-    'dufs',
-    [
-      '-A',
-      '-a',
-      'test:test@/:rw',
-      '-b',
-      '127.0.0.1',
-      '-p',
-      '$port',
-      serveDir.path,
-    ],
-    workingDirectory: serveDir.path,
+/// Start Apache mod_dav from `test/apache`.
+Future<_ApacheServer> _startApacheServer() async {
+  const image = 'webdav-client-test-apache';
+  final build = await Process.run(
+    'docker',
+    ['build', '-q', '-t', image, 'test/apache'],
   );
+  if (build.exitCode != 0) {
+    throw StateError('Failed to build $image: ${build.stderr}');
+  }
 
-  // Drain the process streams to avoid filling buffers during tests.
-  process.stdout.listen((_) {});
-  process.stderr.listen((data) {
-    final message = utf8.decode(data, allowMalformed: true).trim();
-    if (message.isNotEmpty) {
-      print('dufs stderr: $message');
-    }
-  });
+  final port = await _allocatePort();
+  final name = '$image-$port';
+  final run = await Process.run('docker', [
+    'run',
+    '-d',
+    '--rm',
+    '--name',
+    name,
+    '-p',
+    '127.0.0.1:$port:80',
+    image,
+  ]);
+  if (run.exitCode != 0) {
+    throw StateError('Failed to start $image: ${run.stderr}');
+  }
 
-  await _waitForServerReady(port);
-  return _DufsServer(process, serveDir, port);
+  final server = _ApacheServer(name, port);
+  try {
+    await _waitForServerReady(server.url);
+  } catch (_) {
+    await server.dispose();
+    rethrow;
+  }
+  return server;
 }
 
-Future<void> _waitForServerReady(int port) async {
+Future<void> _waitForServerReady(String url) async {
   final client = HttpClient();
   final authHeader = 'Basic ${base64Encode(utf8.encode('test:test'))}';
-  final uri = Uri.parse('http://127.0.0.1:$port/__dufs__/health');
-  final deadline = DateTime.now().add(const Duration(seconds: 10));
+  final uri = Uri.parse('$url/');
+  final deadline = DateTime.now().add(const Duration(seconds: 30));
 
   while (DateTime.now().isBefore(deadline)) {
     try {
-      final request = await client.getUrl(uri);
+      final request = await client.openUrl('OPTIONS', uri);
       request.headers.set(HttpHeaders.authorizationHeader, authHeader);
       final response = await request.close();
-      await response.drain();
+      await response.drain<void>();
       if (response.statusCode == HttpStatus.ok) {
         client.close(force: true);
         return;
       }
     } catch (_) {
-      await Future<void>.delayed(const Duration(milliseconds: 200));
+      // Not accepting connections yet.
     }
+    await Future<void>.delayed(const Duration(milliseconds: 200));
   }
 
   client.close(force: true);
-  throw StateError('Timed out waiting for dufs to start on port $port');
+  throw StateError('Timed out waiting for Apache at $url');
 }
 
 Future<int> _allocatePort() async {

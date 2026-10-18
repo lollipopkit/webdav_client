@@ -191,7 +191,7 @@ cancel.cancel('reason');
 
 ## Testing
 
-The WebDAV integration specs spawn a temporary [dufs](https://github.com/sigoden/dufs) server on `localhost`. Install `dufs` and ensure it is available on your `PATH`, then run:
+The WebDAV integration specs build and run an Apache `mod_dav` container from `test/apache`, served under `/dav`. They need Docker with permission to build and run containers, and are skipped when `docker info` fails. Run:
 
 ```shell
 dart test
