@@ -41,10 +41,12 @@ void main() {
       });
 
       // The timeout should fire after 500ms since the stream never completes
-      expect(
-        () => client.readFile('/slow', '${tmpDir.path}/out.bin'),
-        throwsA(anything),
+      final out = File('${tmpDir.path}/out.bin');
+      await expectLater(
+        client.readFile('/slow', out.path),
+        throwsA(isA<WebdavException>()),
       );
+      expect(out.existsSync(), isFalse);
     });
   });
 
@@ -86,11 +88,15 @@ void main() {
       Future.delayed(
           const Duration(milliseconds: 100), () => cancelToken.cancel('test'));
 
-      expect(
-        () => client.readFile('/cancel', '${tmpDir.path}/out.bin',
-            cancelToken: cancelToken),
-        throwsA(anything),
+      final out = File('${tmpDir.path}/out.bin');
+      await expectLater(
+        client.readFile('/cancel', out.path, cancelToken: cancelToken),
+        throwsA(
+          isA<DioException>()
+              .having((e) => e.type, 'type', DioExceptionType.cancel),
+        ),
       );
+      expect(out.existsSync(), isFalse);
     });
   });
 
@@ -101,16 +107,15 @@ void main() {
     tearDown(() async => server.close(force: true));
 
     test('stream error during download', () async {
-      // Send 200 OK with chunked encoding, send data, then force error
+      // Promise more bytes than are sent, then drop the connection.
       server.listen((request) async {
-        request.response
-          ..statusCode = HttpStatus.ok
-          ..headers.contentType = ContentType('application', 'octet-stream')
-          ..headers.set('Transfer-Encoding', 'chunked');
-        request.response.add([1, 2, 3]);
-        await request.response.flush();
-        // Force close the connection (this should trigger stream error)
-        await request.response.close();
+        await request.drain<void>();
+        final socket = await request.response.detachSocket(
+          writeHeaders: false,
+        );
+        socket.write('HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nabc');
+        await socket.flush();
+        socket.destroy();
       });
 
       final client = WebdavClient.noAuth(
@@ -122,10 +127,12 @@ void main() {
         if (tmpDir.existsSync()) await tmpDir.delete(recursive: true);
       });
 
-      // This should either succeed (data received before close) or throw
-      try {
-        await client.readFile('/error', '${tmpDir.path}/out.bin');
-      } catch (_) {}
+      final out = File('${tmpDir.path}/out.bin');
+      await expectLater(
+        client.readFile('/error', out.path),
+        throwsA(isA<WebdavException>()),
+      );
+      expect(out.existsSync(), isFalse);
     });
   });
 

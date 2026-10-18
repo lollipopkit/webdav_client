@@ -1,13 +1,19 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:webdav_client_plus/src/internal/hash_utils.dart';
 
 /// Auth for WebDAV client
 sealed class Auth {
   const Auth();
 
-  /// Get authorization data
-  String? authorize(String method, String path) => null;
+  /// Get authorization data for a request whose body is [body].
+  String? authorize(
+    String method,
+    String path, {
+    List<int> body = const [],
+  }) =>
+      null;
 }
 
 /// NoAuth - No authentication
@@ -15,7 +21,12 @@ class NoAuth extends Auth {
   const NoAuth();
 
   @override
-  String? authorize(String method, String path) => null;
+  String? authorize(
+    String method,
+    String path, {
+    List<int> body = const [],
+  }) =>
+      null;
 }
 
 /// BasicAuth
@@ -38,7 +49,11 @@ final class BasicAuth extends Auth {
   });
 
   @override
-  String authorize(String method, String path) {
+  String authorize(
+    String method,
+    String path, {
+    List<int> body = const [],
+  }) {
     final List<int> bytes = utf8.encode('$user:$pwd');
     return 'Basic ${base64Encode(bytes)}';
   }
@@ -59,7 +74,11 @@ final class BearerAuth extends Auth {
   });
 
   @override
-  String authorize(String method, String path) {
+  String authorize(
+    String method,
+    String path, {
+    List<int> body = const [],
+  }) {
     return 'Bearer $token';
   }
 }
@@ -125,13 +144,25 @@ final class DigestAuth extends Auth {
   String? get userhash => digestParts.parts['userhash'];
 
   @override
-  String authorize(String method, String path) {
+  String? authorize(
+    String method,
+    String path, {
+    List<int> body = const [],
+  }) {
+    // Without a challenge the response hash only exposes the password, and
+    // an unsupported algorithm or qop must not fall back to weaker forms.
+    if (nonce?.isNotEmpty != true || challengeRank(digestParts) < 0) {
+      return null;
+    }
     digestParts.uri = path;
     digestParts.method = method;
-    return _getDigestAuthorization();
+    return _getDigestAuthorization(body);
   }
 
-  String _getDigestAuthorization() {
+  /// Whether the selected qop is `auth-int`, which hashes the request body.
+  bool get hashesBody => _selectedQop == 'auth-int';
+
+  String _getDigestAuthorization(List<int> body) {
     // Increment nonce count with each request using the same nonce
     _nonceCount++;
 
@@ -140,7 +171,7 @@ final class DigestAuth extends Auth {
 
     final cnonce = computeNonce();
     final ha1 = _computeHA1(cnonce);
-    final ha2 = _computeHA2();
+    final ha2 = _computeHA2(body);
     final response = _computeResponse(ha1, ha2, nc, cnonce);
 
     // Build authorization header according to RFC
@@ -215,14 +246,15 @@ final class DigestAuth extends Auth {
     return base;
   }
 
-  String _computeHA2() {
+  String _computeHA2(List<int> body) {
     final selectedQop = _selectedQop;
 
     if (selectedQop == null || selectedQop.isEmpty || selectedQop == 'auth') {
       return _hashByAlgorithm('${digestParts.method}:${digestParts.uri}');
     }
     // selectedQop == 'auth-int'
-    final bodyHash = _hashByAlgorithm(entityBody ?? '');
+    // RFC 7616 §3.4.3: H(entity-body) over the bytes actually sent.
+    final bodyHash = _hash.convert(body).toString();
     return _hashByAlgorithm(
         '${digestParts.method}:${digestParts.uri}:$bodyHash');
   }
@@ -241,50 +273,56 @@ final class DigestAuth extends Auth {
   ///
   /// RFC 7616 sends qop-options as a quoted list (for example
   /// `qop="auth,auth-int"`), while the Authorization header and response hash
-  /// must contain exactly one chosen token. Prefer `auth` for interoperability,
-  /// falling back to `auth-int` or the first extension token.
+  /// must contain exactly one chosen token.
   String? get _selectedQop {
     final value = qop;
-    if (value == null || value.trim().isEmpty) {
-      return null;
-    }
+    return value == null ? null : _pickQop(value);
+  }
 
-    final tokens = value
+  /// Prefer `auth` for interoperability, then `auth-int`; other tokens are
+  /// not supported.
+  static String? _pickQop(String qopOptions) {
+    final tokens = qopOptions
         .split(',')
         .map((token) => token.trim().toLowerCase())
-        .where((token) => token.isNotEmpty)
-        .toList(growable: false);
-    if (tokens.isEmpty) {
-      return null;
-    }
-    if (tokens.contains('auth')) {
-      return 'auth';
-    }
-    if (tokens.contains('auth-int')) {
-      return 'auth-int';
-    }
+        .toSet();
+    if (tokens.contains('auth')) return 'auth';
+    if (tokens.contains('auth-int')) return 'auth-int';
     return null;
   }
 
-  String _hashByAlgorithm(String data) {
-    var alg = algorithm?.toLowerCase();
-    if (alg != null && alg.endsWith('-sess')) {
-      alg = alg.substring(0, alg.length - '-sess'.length);
-    }
-
-    if (alg != null) {
-      if (alg == 'sha-512-256' || alg == 'sha512-256') {
-        return sha512256Hash(data);
-      } else if (alg == 'sha-512' || alg == 'sha512') {
-        return sha512Hash(data);
-      } else if (alg == 'sha-256' || alg == 'sha256') {
-        return sha256Hash(data);
-      }
-    }
-
-    // Default to MD5 if no algorithm is specified or recognized
-    return md5Hash(data);
+  /// Preference of a challenge, higher being stronger, or -1 when its
+  /// algorithm is unsupported or it offers qop values but none we support.
+  static int challengeRank(DigestParts parts) {
+    final qop = parts.parts['qop'] ?? '';
+    if (qop.trim().isNotEmpty && _pickQop(qop) == null) return -1;
+    return algorithmRank(parts.parts['algorithm']);
   }
+
+  /// Preference of a challenge's `algorithm`, higher being stronger, or -1
+  /// when it is not supported.
+  static int algorithmRank(String? algorithm) {
+    var alg = algorithm?.trim().toLowerCase() ?? '';
+    if (alg.endsWith('-sess')) alg = alg.substring(0, alg.length - 5);
+    return switch (alg) {
+      '' || 'md5' => 0,
+      'sha-256' || 'sha256' => 1,
+      'sha-512' || 'sha512' => 2,
+      'sha-512-256' || 'sha512-256' => 3,
+      _ => -1,
+    };
+  }
+
+  String _hashByAlgorithm(String data) =>
+      _hash.convert(utf8.encode(data)).toString();
+
+  /// Hash for the challenge's algorithm; MD5 when absent (RFC 7616 §3.3).
+  crypto.Hash get _hash => switch (algorithmRank(algorithm)) {
+        3 => crypto.sha512256,
+        2 => crypto.sha512,
+        1 => crypto.sha256,
+        _ => crypto.md5,
+      };
 }
 
 /// DigestParts

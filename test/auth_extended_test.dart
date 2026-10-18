@@ -187,7 +187,7 @@ void main() {
       final parts = DigestParts(header);
       final auth = DigestAuth(user: 'u', pwd: 'p', digestParts: parts);
       final result = auth.authorize('GET', '/');
-      final values = _parseDigestAuthorization(result);
+      final values = _parseDigestAuthorization(result!);
 
       String h(String value) =>
           crypto.sha512256.convert(utf8.encode(value)).toString();
@@ -208,7 +208,7 @@ void main() {
       final parts = DigestParts(header);
       final auth = DigestAuth(user: 'u', pwd: 'p', digestParts: parts);
       final result = auth.authorize('GET', '/');
-      final values = _parseDigestAuthorization(result);
+      final values = _parseDigestAuthorization(result!);
 
       String h(String value) =>
           crypto.sha512256.convert(utf8.encode(value)).toString();
@@ -238,7 +238,7 @@ void main() {
       final parts = DigestParts(header);
       final auth = DigestAuth(user: 'u', pwd: 'p', digestParts: parts);
       final result = auth.authorize('GET', '/resource');
-      final values = _parseDigestAuthorization(result);
+      final values = _parseDigestAuthorization(result!);
 
       final ha1 = _md5('u:r:p');
       final ha2 = _md5('GET:/resource');
@@ -255,7 +255,7 @@ void main() {
       final parts = DigestParts(header);
       final auth = DigestAuth(user: 'u', pwd: 'p', digestParts: parts);
       final result = auth.authorize('GET', '/');
-      final values = _parseDigestAuthorization(result);
+      final values = _parseDigestAuthorization(result!);
 
       final ha1 = _md5('u:r:p');
       final emptyBodyHash = _md5('');
@@ -268,13 +268,11 @@ void main() {
       expect(values['response'], expected);
     });
 
-    test('unrecognized algorithm defaults to MD5', () {
+    test('unrecognized algorithm sends no credentials', () {
       const header = 'realm="r", nonce="n", qop="auth", algorithm=UNKNOWN';
       final parts = DigestParts(header);
       final auth = DigestAuth(user: 'u', pwd: 'p', digestParts: parts);
-      final result = auth.authorize('GET', '/');
-      expect(result, startsWith('Digest'));
-      expect(result, contains('algorithm=UNKNOWN'));
+      expect(auth.authorize('GET', '/'), isNull);
     });
 
     test('empty algorithm defaults to MD5', () {
@@ -318,7 +316,7 @@ void main() {
       final parts = DigestParts(header);
       final auth = DigestAuth(user: 'u', pwd: 'p', digestParts: parts);
       final result = auth.authorize('GET', '/');
-      final values = _parseDigestAuthorization(result);
+      final values = _parseDigestAuthorization(result!);
 
       expect(values['username'], _md5('u:r'));
       expect(values['userhash'], 'true');
