@@ -43,6 +43,31 @@
   against the resolved request URL, ignoring percent-encoding differences.
 - `DAV:status` values are only accepted as HTTP status-lines, so text such as
   `error 200` no longer marks a propstat as successful.
+- Hrefs are decoded exactly once and kept as sent when they are not valid
+  percent-encoding, so a bare `%` no longer makes `readDir` throw and
+  `%2541` is no longer read as `A`. Raw non-ASCII characters in hrefs are
+  kept instead of making parsing throw. Surrounding whitespace is trimmed from
+  hrefs and lock tokens.
+- Multi-Status parsing only reads the `DAV:response` children of the root, so
+  property values containing `response` elements no longer add phantom
+  entries. Response, propstat and status elements must be in `DAV:`.
+- `WebdavFile` reads its fields from `DAV:` properties only; a same-named
+  property in another namespace stays in `customProps`. `creationdate` also
+  accepts HTTP dates and lowercase RFC 3339, rejects dates outside the
+  RFC 3339 grammar or calendar (such as Feb 30) instead of rolling them over,
+  and two-digit RFC 850 years follow RFC 9110 §5.6.7.
+- `propFind` finds the target under a base path at `Depth: 1` instead of
+  returning an empty map, and no longer returns the properties of another
+  resource when the response holds a single entry.
+- Absolute `HTTP://` and `HTTPS://` targets are recognised regardless of
+  scheme case instead of being resolved as paths.
+- `modifyProps` no longer gives set and remove properties in different
+  namespaces the same prefix, which sent the wrong property.
+- `setProps`, `modifyProps` and `propPatch` throw when a 207 carries a
+  response-level error status. PROPPATCH, COPY and MOVE treat as failed a
+  propstat whose `DAV:status` is missing or unparsable, a response whose own
+  `DAV:status` is unparsable, and a response with neither a status nor
+  propstats.
 
 ## [2.0.0]
 
