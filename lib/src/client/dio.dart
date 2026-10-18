@@ -245,6 +245,12 @@ class _WdDio with DioMixin {
                   options.headers?.removeWhere(
                     (key, _) => _entityHeaders.contains(key.toLowerCase()),
                   );
+                  // Null overrides the client-wide headers dio merges in. dio
+                  // rejects that for content-type, which a bodyless GET may
+                  // carry harmlessly.
+                  for (final key in _entityHeaders) {
+                    if (key != 'content-type') options.headers?[key] = null;
+                  }
                 }
               : optionsHandler,
           onSendProgress: onSendProgress,
@@ -769,12 +775,16 @@ class _WdDio with DioMixin {
 
     Future<void> closeAndDelete({bool awaitWrite = true}) =>
         closing ??= () async {
-          if (awaitWrite) await asyncWrite;
-          await fileReader.close();
           try {
-            await file.delete();
-          } on PathNotFoundException {
-            // The caller may have removed the partial download already.
+            if (awaitWrite) await asyncWrite;
+            await fileReader.close();
+          } finally {
+            // Delete even when closing failed, so no partial file remains.
+            try {
+              await file.delete();
+            } on PathNotFoundException {
+              // The caller may have removed the partial download already.
+            }
           }
         }();
 

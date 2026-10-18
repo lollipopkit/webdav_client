@@ -226,6 +226,18 @@ void main() {
       }
     });
 
+    test('propFind tells an encoded % apart from its decoded form', () async {
+      reply = (_) => _multiStatus(
+            _response('/dav/a%20b', '<d:displayname>space</d:displayname>') +
+                _response(
+                  '/dav/a%2520b',
+                  '<d:displayname>percent</d:displayname>',
+                ),
+          );
+      final props = await client.propFind('/a%2520b', depth: PropsDepth.one);
+      expect(props['{DAV:}displayname']?.innerText, 'percent');
+    });
+
     test('propFind ignores an absolute href on another origin', () async {
       reply = (_) => _multiStatus(
             _response('http://other.invalid/dav/dir/', '<d:displayname/>') +
