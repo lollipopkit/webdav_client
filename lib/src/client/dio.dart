@@ -212,8 +212,8 @@ class _WdDio with DioMixin {
         final redirectPath = _resolveRedirectLocation(uri, locations.first);
         // An unusable Location is handed back like a missing one.
         if (redirectPath == null) return resp;
-        await _drainResponseData(resp.data);
         final redirectUri = Uri.parse(redirectPath);
+        // A redirect that is not followed keeps its body for the caller.
         if (!_canRedirectTo(
           uri,
           redirectUri,
@@ -222,6 +222,7 @@ class _WdDio with DioMixin {
         )) {
           return resp;
         }
+        await _drainResponseData(resp.data);
         // 307/308 preserve the request body — streams can't be replayed.
         if (resp.statusCode != 303 && data is Stream) {
           throw WebdavException(

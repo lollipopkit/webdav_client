@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
+import 'package:dio/dio.dart' show ResponseBody, ResponseType;
 import 'package:test/test.dart';
 import 'package:webdav_client_plus/src/internal/auth_challenge.dart';
 import 'package:webdav_client_plus/webdav_client_plus.dart';
@@ -71,6 +72,28 @@ void main() {
           .read('/f', headers: {'Cookie': 'sid=secret'});
       expect(cookies, {'/x': null, '/y': null});
     });
+  });
+
+  test('a redirect that is not followed keeps its body', () async {
+    final server = await _serve((request) async {
+      request.response
+        ..statusCode = HttpStatus.found
+        ..headers.set('Location', 'http://example.invalid/x')
+        ..write('moved');
+      await request.response.close();
+    });
+
+    final resp = await WebdavClient.basicAuth(
+      url: _url(server),
+      user: 'u',
+      pwd: 'p',
+    ).request<ResponseBody>(
+      'GET',
+      target: '/f',
+      configure: (options) => options.responseType = ResponseType.stream,
+    );
+    expect(resp.statusCode, HttpStatus.found);
+    expect(await utf8.decoder.bind(resp.data!.stream).join(), 'moved');
   });
 
   group('303 See Other', () {
