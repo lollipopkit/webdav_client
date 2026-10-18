@@ -253,6 +253,24 @@ void main() {
       expect(params['nonce'], 'n1');
     });
 
+    test('a streamed body leaves the client auth unchanged on 401', () async {
+      final server = await _serve((request) async {
+        await request.drain<void>();
+        request.response
+          ..statusCode = HttpStatus.unauthorized
+          ..headers.set('WWW-Authenticate', 'Digest realm="r", nonce="n"');
+        await request.response.close();
+      });
+
+      final auth = digest();
+      final client = WebdavClient(url: _url(server), auth: auth);
+      await expectLater(
+        client.writeStream('/f', Stream.value([1, 2, 3]), 3),
+        throwsA(isA<WebdavException>()),
+      );
+      expect(client.auth, same(auth));
+    });
+
     test('rejects a challenge with only unsupported algorithms', () async {
       final server = await _serve((request) async {
         request.response

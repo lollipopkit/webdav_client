@@ -738,9 +738,14 @@ extension WebdavClientPropfind on WebdavClient {
     );
 
     // Keys are decoded server hrefs, which carry the base URL's path.
-    final target = _hrefPathKey(decodeHref(Uri.parse(absoluteUrl(path)).path));
+    final targetUri = Uri.parse(absoluteUrl(path));
+    final target = _hrefPathKey(decodeHref(targetUri.path));
     final statusMap = raw.entries
-        .firstWhereOrNull((entry) => _hrefPathKey(entry.key) == target)
+        .firstWhereOrNull(
+          (entry) =>
+              _hrefOriginMatches(entry.key, targetUri) &&
+              _hrefPathKey(entry.key) == target,
+        )
         ?.value;
     if (statusMap == null) {
       return const <String, XmlElement>{};
@@ -904,6 +909,22 @@ List<String> _hrefList(XmlElement? element) {
 }
 
 final _schemeAuthorityReg = RegExp('^[A-Za-z][A-Za-z0-9+.-]*://[^/]*');
+
+/// Whether an absolute [decodedHref] names the same origin as [target]; a
+/// path-only href always does.
+bool _hrefOriginMatches(String decodedHref, Uri target) {
+  final origin = _schemeAuthorityReg.firstMatch(decodedHref)?[0];
+  if (origin == null) return true;
+  final Uri uri;
+  try {
+    uri = Uri.parse(origin);
+  } on FormatException {
+    return false;
+  }
+  return uri.scheme == target.scheme.toLowerCase() &&
+      uri.host == target.host.toLowerCase() &&
+      uri.port == target.port;
+}
 
 /// Path of a decoded href without scheme, authority or trailing slash.
 String _hrefPathKey(String decodedHref) {

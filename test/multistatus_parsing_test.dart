@@ -226,6 +226,23 @@ void main() {
       }
     });
 
+    test('propFind ignores an absolute href on another origin', () async {
+      reply = (_) => _multiStatus(
+            _response('http://other.invalid/dav/dir/', '<d:displayname/>') +
+                _response(
+                  'HTTP://127.0.0.1:${server.port}/dav/dir/',
+                  '<d:displayname>dir</d:displayname>',
+                ),
+          );
+      final props = await client.propFind('/dir', depth: PropsDepth.one);
+      expect(props['{DAV:}displayname']?.innerText, 'dir');
+
+      reply = (_) => _multiStatus(
+            _response('http://other.invalid/dav/dir/', '<d:displayname/>'),
+          );
+      expect(await client.propFind('/dir'), isEmpty);
+    });
+
     test('propFind ignores a sole entry for another resource', () async {
       reply = (_) => _multiStatus(
             _response('/dav/other', '<d:displayname>other</d:displayname>'),

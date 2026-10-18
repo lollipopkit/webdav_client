@@ -124,14 +124,8 @@ class _WdDio with DioMixin {
                   response: resp,
                 );
               }
-              // Create a new DigestAuth instance with the new challenge
-              client.auth = DigestAuth(
-                user: digestAuth.user,
-                pwd: digestAuth.pwd,
-                digestParts: DigestParts(digestHeader),
-              );
-
-              // Stream bodies cannot be retried.
+              // Stream bodies cannot be retried, so leave the client's auth
+              // untouched rather than commit a challenge no retry used.
               if (data is Stream) {
                 throw WebdavException(
                   message: 'Cannot retry streamed request after 401; '
@@ -140,6 +134,11 @@ class _WdDio with DioMixin {
                   response: resp,
                 );
               }
+              client.auth = DigestAuth(
+                user: digestAuth.user,
+                pwd: digestAuth.pwd,
+                digestParts: DigestParts(digestHeader),
+              );
               // Retry the request
               return req(
                 method,

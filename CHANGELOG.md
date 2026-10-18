@@ -41,7 +41,8 @@
   listing several schemes works, and chooses the strongest supported
   algorithm; a challenge with only unsupported algorithms or qop values fails
   instead of silently using MD5 or the qop-less formula. `qop=auth-int` hashes
-  the actual request body.
+  the actual request body. A streamed request that cannot be retried after a
+  401 leaves the client's Digest state unchanged.
 - `readFile` reports a 401 as `WebdavException` instead of `StateError`, no
   longer limits the whole download to `receiveTimeout`, and removes the
   partial file when writing it fails. When the local file cannot be created,
@@ -76,7 +77,8 @@
   and two-digit RFC 850 years follow RFC 9110 §5.6.7.
 - `propFind` finds the target under a base path at `Depth: 1` instead of
   returning an empty map, and no longer returns the properties of another
-  resource when the response holds a single entry.
+  resource when the response holds a single entry or names it by an absolute
+  href on another origin.
 - Absolute `HTTP://` and `HTTPS://` targets are recognised regardless of
   scheme case instead of being resolved as paths.
 - `modifyProps` no longer gives set and remove properties in different
