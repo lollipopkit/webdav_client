@@ -22,3 +22,12 @@ int? getIntValue(XmlElement parent, String tag) {
 /// Return `true` when [parent] contains at least one child with [childTag].
 bool hasElement(XmlElement parent, String childTag) =>
     findElements(parent, childTag).isNotEmpty;
+
+final _statusLineReg = RegExp(r'^HTTP/\d+(?:\.\d+)?\s+(\d{3})(?:\s|$)');
+
+/// Parse the code of a `DAV:status` HTTP status-line (RFC 4918 §14.28), or
+/// return `null` when [statusText] is not one.
+int? parseStatusLine(String statusText) {
+  final match = _statusLineReg.firstMatch(statusText.trim());
+  return match != null ? int.parse(match.group(1)!) : null;
+}

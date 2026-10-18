@@ -72,7 +72,7 @@ List<MultiStatusResponse> parseMultiStatus(String xmlString) {
     );
     final overallStatusText = overallStatusElement?.innerText;
     final overallStatusCode =
-        overallStatusText != null ? _parseStatusCode(overallStatusText) : null;
+        overallStatusText != null ? parseStatusLine(overallStatusText) : null;
 
     final errorElement = responseElement.childElements.firstWhereOrNull(
       (element) => element.name.local == 'error',
@@ -109,7 +109,7 @@ List<MultiStatusResponse> parseMultiStatus(String xmlString) {
       final statusElement = findElements(propstatElement, 'status').firstOrNull;
       final statusText = statusElement?.innerText;
       final statusCode =
-          statusText != null ? _parseStatusCode(statusText) : null;
+          statusText != null ? parseStatusLine(statusText) : null;
 
       final propElement = findElements(propstatElement, 'prop').firstOrNull;
       final properties = <String, XmlElement>{};
@@ -461,10 +461,4 @@ extension _Utils on WebdavClient {
       );
     }
   }
-}
-
-int? _parseStatusCode(String statusText) {
-  final match = RegExp(r'\b(\d{3})\b').firstMatch(statusText);
-  if (match == null) return null;
-  return int.tryParse(match.group(1)!);
 }

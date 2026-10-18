@@ -7,6 +7,8 @@
 - `readDir` no longer returns the requested collection itself when the base
   URL has a path (e.g. `/remote.php/dav/files/<user>`). Hrefs are now compared
   against the resolved request URL, ignoring percent-encoding differences.
+- `DAV:status` values are only accepted as HTTP status-lines, so text such as
+  `error 200` no longer marks a propstat as successful.
 
 ## [2.0.0]
 

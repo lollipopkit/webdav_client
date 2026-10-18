@@ -209,7 +209,7 @@ XmlElement? _findSuccessfulPropstat(XmlElement response) {
       continue;
     }
 
-    final statusCode = _extractStatusCode(statusText);
+    final statusCode = parseStatusLine(statusText);
     if (statusCode != null && statusCode >= 200 && statusCode < 300) {
       return propstat;
     }
@@ -222,14 +222,6 @@ bool _isDirectory(XmlElement prop) {
   final resourceTypes = findElements(prop, 'resourcetype');
   return resourceTypes.isNotEmpty &&
       hasElement(resourceTypes.first, 'collection');
-}
-
-int? _extractStatusCode(String statusText) {
-  final match = RegExp(r'(\d{3})').firstMatch(statusText);
-  if (match == null) {
-    return null;
-  }
-  return int.tryParse(match.group(1)!);
 }
 
 /// Parse HTTP date formats accepted by RFC 9110 §5.6.7.

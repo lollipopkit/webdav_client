@@ -191,7 +191,7 @@ cancel.cancel('reason');
 
 ## Testing
 
-The WebDAV integration specs build and run an Apache `mod_dav` container from `test/apache`, served under `/dav`. They need a running Docker daemon and are skipped without one. Run:
+The WebDAV integration specs build and run an Apache `mod_dav` container from `test/apache`, served under `/dav`. They need Docker with permission to build and run containers, and are skipped when `docker info` fails. Run:
 
 ```shell
 dart test
