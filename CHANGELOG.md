@@ -21,12 +21,14 @@
 
 - Digest picks its challenge by auth-scheme, so a `WWW-Authenticate` field
   listing several schemes works, and chooses the strongest supported
-  algorithm; a challenge with only unsupported algorithms fails instead of
-  silently using MD5. `qop=auth-int` hashes the actual request body.
+  algorithm; a challenge with only unsupported algorithms or qop values fails
+  instead of silently using MD5 or the qop-less formula. `qop=auth-int` hashes
+  the actual request body.
 - `readFile` reports a 401 as `WebdavException` instead of `StateError`, no
   longer limits the whole download to `receiveTimeout`, and removes the
   partial file when writing it fails. When the local file cannot be created,
-  the response body is cancelled instead of being buffered by dio. `readFile` and `readStream` read the
+  the response body is cancelled instead of being buffered by dio. On timeout
+  or cancellation the partial file is removed before the error is thrown. `readFile` and `readStream` read the
   body of an unsuccessful response into the exception, releasing the
   connection.
 - A 303 turns the request into a GET without entity headers and keeps HEAD as

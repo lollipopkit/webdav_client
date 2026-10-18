@@ -275,6 +275,33 @@ void main() {
       );
     });
 
+    test('refuses a challenge whose qop options are all unsupported', () async {
+      final auth = DigestAuth(
+        user: 'u',
+        pwd: 'p',
+        digestParts: DigestParts('realm="r", nonce="n", qop="auth-conf"'),
+      );
+      expect(auth.authorize('GET', '/'), isNull);
+
+      final server = await _serve((request) async {
+        request.response
+          ..statusCode = HttpStatus.unauthorized
+          ..headers.set(
+            'WWW-Authenticate',
+            'Digest realm="r", nonce="n", qop="auth-conf"',
+          );
+        await request.response.close();
+      });
+      await expectLater(
+        WebdavClient(url: _url(server), auth: digest()).read('/f'),
+        throwsA(isA<WebdavException>().having(
+          (e) => e.message,
+          'message',
+          contains('no supported algorithm or qop'),
+        )),
+      );
+    });
+
     test('auth-int hashes the request body', () async {
       String? verified;
       final server = await _serve((request) async {

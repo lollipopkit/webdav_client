@@ -150,8 +150,10 @@ final class DigestAuth extends Auth {
     List<int> body = const [],
   }) {
     // Without a challenge the response hash only exposes the password, and
-    // an unsupported algorithm must not silently fall back to MD5.
-    if (nonce?.isNotEmpty != true || algorithmRank(algorithm) < 0) return null;
+    // an unsupported algorithm or qop must not fall back to weaker forms.
+    if (nonce?.isNotEmpty != true || challengeRank(digestParts) < 0) {
+      return null;
+    }
     digestParts.uri = path;
     digestParts.method = method;
     return _getDigestAuthorization(body);
@@ -271,29 +273,30 @@ final class DigestAuth extends Auth {
   ///
   /// RFC 7616 sends qop-options as a quoted list (for example
   /// `qop="auth,auth-int"`), while the Authorization header and response hash
-  /// must contain exactly one chosen token. Prefer `auth` for interoperability,
-  /// falling back to `auth-int` or the first extension token.
+  /// must contain exactly one chosen token.
   String? get _selectedQop {
     final value = qop;
-    if (value == null || value.trim().isEmpty) {
-      return null;
-    }
+    return value == null ? null : _pickQop(value);
+  }
 
-    final tokens = value
+  /// Prefer `auth` for interoperability, then `auth-int`; other tokens are
+  /// not supported.
+  static String? _pickQop(String qopOptions) {
+    final tokens = qopOptions
         .split(',')
         .map((token) => token.trim().toLowerCase())
-        .where((token) => token.isNotEmpty)
-        .toList(growable: false);
-    if (tokens.isEmpty) {
-      return null;
-    }
-    if (tokens.contains('auth')) {
-      return 'auth';
-    }
-    if (tokens.contains('auth-int')) {
-      return 'auth-int';
-    }
+        .toSet();
+    if (tokens.contains('auth')) return 'auth';
+    if (tokens.contains('auth-int')) return 'auth-int';
     return null;
+  }
+
+  /// Preference of a challenge, higher being stronger, or -1 when its
+  /// algorithm is unsupported or it offers qop values but none we support.
+  static int challengeRank(DigestParts parts) {
+    final qop = parts.parts['qop'] ?? '';
+    if (qop.trim().isNotEmpty && _pickQop(qop) == null) return -1;
+    return algorithmRank(parts.parts['algorithm']);
   }
 
   /// Preference of a challenge's `algorithm`, higher being stronger, or -1

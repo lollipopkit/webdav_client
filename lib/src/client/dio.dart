@@ -110,7 +110,8 @@ class _WdDio with DioMixin {
             final digestHeader = _pickDigestChallenge(challenges);
             if (digestHeader == null && offers('digest')) {
               throw WebdavException(
-                message: 'Digest auth failed, no supported algorithm offered',
+                message: 'Digest auth failed, no supported algorithm or qop '
+                    'offered',
                 statusCode: 401,
                 response: resp,
               );
@@ -763,90 +764,85 @@ class _WdDio with DioMixin {
 
     late StreamSubscription<Uint8List> subscription;
     Future<Null>? asyncWrite;
-    var closed = false;
+    // Shared so every failure path waits for the same cleanup before the
+    // caller sees the error.
+    Future<void>? closing;
 
-    Future<void> closeAndDelete({bool awaitWrite = true}) async {
-      if (!closed) {
-        closed = true;
-        if (awaitWrite) await asyncWrite;
-        await fileReader.close();
-        try {
-          await file.delete();
-        } on PathNotFoundException {
-          // The caller may have removed the partial download already. This runs
-          // from the unawaited `whenCancel` handler, where throwing would
-          // surface as an unhandled async error instead of reaching the caller.
-        }
-      }
+    Future<void> closeAndDelete({bool awaitWrite = true}) =>
+        closing ??= () async {
+          if (awaitWrite) await asyncWrite;
+          await fileReader.close();
+          try {
+            await file.delete();
+          } on PathNotFoundException {
+            // The caller may have removed the partial download already.
+          }
+        }();
+
+    void fail(Object error) {
+      if (completer.isCompleted) return;
+      completer.completeError(
+        // Cancellation surfaces as dio's own error, as it always has.
+        error is DioException && error.type == DioExceptionType.cancel
+            ? error
+            : WebdavException(
+                message: error.toString(),
+                statusCode: resp.statusCode,
+                statusMessage: resp.statusMessage,
+                response: resp,
+              ),
+      );
     }
 
     subscription = stream.listen(
       (data) {
         subscription.pause();
-        // Write file asynchronously
-        asyncWrite = fileReader.writeFrom(data).then((raf) {
-          // Notify progress
+        asyncWrite = fileReader.writeFrom(data).then((_) {
           received += data.length;
-
           onProgress?.call(received, total);
-
-          raf = raf;
           if (cancelToken == null || !cancelToken.isCancelled) {
             subscription.resume();
           }
-        }).catchError((err) async {
+        }).catchError((Object err) async {
           try {
             await subscription.cancel();
             // This handler is part of asyncWrite, so it must not await it.
             await closeAndDelete(awaitWrite: false);
           } finally {
-            completer.completeError(WebdavException(
-              message: err.toString(),
-              statusCode: resp.statusCode,
-              statusMessage: resp.statusMessage,
-              response: resp,
-            ));
+            fail(err);
           }
         });
       },
       onDone: () async {
         try {
           await asyncWrite;
-          closed = true;
-          await fileReader.close();
-          completer.complete(resp);
+          await (closing ??= fileReader.close());
+          if (!completer.isCompleted) completer.complete(resp);
         } catch (err) {
-          completer.completeError(WebdavException(
-            message: err.toString(),
-            statusCode: resp.statusCode,
-            statusMessage: resp.statusMessage,
-            response: resp,
-          ));
+          fail(err);
         }
       },
-      onError: (e) async {
+      onError: (Object e) async {
         try {
           await closeAndDelete();
         } finally {
-          completer.completeError(WebdavException(
-            message: e.toString(),
-            statusCode: resp.statusCode,
-            statusMessage: resp.statusMessage,
-            response: resp,
-          ));
+          fail(e);
         }
       },
       cancelOnError: true,
     );
 
-    // ignore: unawaited_futures
-    cancelToken?.whenCancel.then((_) async {
-      await subscription.cancel();
-      await closeAndDelete();
-    });
+    // A paused subscription never sees dio's cancel error, so finish here.
+    cancelToken?.whenCancel.then((error) async {
+      try {
+        await subscription.cancel();
+        await closeAndDelete();
+      } finally {
+        fail(error);
+      }
+    }).ignore();
 
-    // ignore: invalid_use_of_internal_member
-    await DioMixin.listenCancelForAsyncTask(cancelToken, future);
+    await future;
   }
 
   /// write a file with bytes
@@ -1147,16 +1143,14 @@ extension on _WdDio {
     };
   }
 
-  /// The parameters of the strongest Digest challenge whose algorithm is
-  /// supported (RFC 7616 §3.7), or `null` when none is.
+  /// The parameters of the strongest Digest challenge whose algorithm and qop
+  /// are supported (RFC 7616 §3.7), or `null` when none is.
   String? _pickDigestChallenge(List<AuthChallenge> challenges) {
     String? best;
     var bestRank = -1;
     for (final challenge in challenges) {
       if (challenge.scheme != 'digest') continue;
-      final rank = DigestAuth.algorithmRank(
-        DigestParts(challenge.params).parts['algorithm'],
-      );
+      final rank = DigestAuth.challengeRank(DigestParts(challenge.params));
       if (rank > bestRank) {
         best = challenge.params;
         bestRank = rank;
