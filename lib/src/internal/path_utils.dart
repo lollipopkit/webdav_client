@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 /// Join [path0] and [path1] ensuring exactly one slash boundary between them.
 String joinPath(String path0, String path1) {
   while (path0.isNotEmpty && path0.endsWith('/')) {
@@ -259,14 +261,31 @@ bool _isHexDigit(int code) =>
     (code >= 0x41 && code <= 0x46) || // A-F
     (code >= 0x61 && code <= 0x66); // a-f
 
-/// Percent-decode an href, returning it unchanged when it is not valid
-/// percent-encoding (such as a bare `%` or escapes that are not UTF-8).
+/// Percent-decode an href. Characters outside `%XX` escapes, such as raw
+/// non-ASCII text some servers send, are kept as they are. The href is
+/// returned unchanged when it is not valid percent-encoding (such as a bare
+/// `%`) or the escapes are not UTF-8.
 String decodeHref(String href) {
-  for (var i = href.indexOf('%'); i != -1; i = href.indexOf('%', i + 1)) {
-    if (!_isEscapeAt(href, i)) return href;
+  if (!href.contains('%')) return href;
+  final bytes = <int>[];
+  for (var i = 0; i < href.length; i++) {
+    if (href[i] != '%') {
+      final rune = href.codeUnitAt(i);
+      // Keep surrogate pairs together so they encode as one code point.
+      final end = rune >= 0xD800 && rune <= 0xDBFF && i + 1 < href.length
+          ? i + 2
+          : i + 1;
+      bytes.addAll(utf8.encode(href.substring(i, end)));
+      i = end - 1;
+    } else if (_isEscapeAt(href, i)) {
+      bytes.add(int.parse(href.substring(i + 1, i + 3), radix: 16));
+      i += 2;
+    } else {
+      return href;
+    }
   }
   try {
-    return Uri.decodeFull(href);
+    return utf8.decode(bytes);
   } on FormatException {
     return href;
   }

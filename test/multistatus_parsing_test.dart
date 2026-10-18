@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:test/test.dart';
+import 'package:webdav_client_plus/src/internal/path_utils.dart';
 import 'package:webdav_client_plus/webdav_client_plus.dart';
 import 'package:xml/xml.dart';
 
@@ -36,6 +37,25 @@ void main() {
       expect(files.map((f) => f.path), ['/dav/x%41.txt', '/dav/50%.txt']);
       expect(files.map((f) => f.name), ['x%41.txt', '50%.txt']);
       expect(parseMultiStatus(xml).first.href, '/dav/x%41.txt');
+    });
+
+    test('keeps raw non-ASCII text and decodes escapes beside it', () {
+      final xml = _multiStatus(
+        _response('/dav/文件.txt', '<d:resourcetype/>') +
+            _response('/dav/文件%20a%E2%82%AC.txt', '<d:resourcetype/>') +
+            _response('/dav/😀%41', '<d:resourcetype/>'),
+      );
+      expect(WebdavFile.parseFiles('/', xml).map((f) => f.path), [
+        '/dav/文件.txt',
+        '/dav/文件 a€.txt',
+        '/dav/😀A',
+      ]);
+      expect(parseMultiStatus(xml).first.href, '/dav/文件.txt');
+    });
+
+    test('keeps escapes that are not UTF-8', () {
+      expect(decodeHref('/dav/%FF.txt'), '/dav/%FF.txt');
+      expect(decodeHref('/dav/plain'), '/dav/plain');
     });
 
     test('trims surrounding whitespace', () {

@@ -11,7 +11,8 @@
   `error 200` no longer marks a propstat as successful.
 - Hrefs are decoded exactly once and kept as sent when they are not valid
   percent-encoding, so a bare `%` no longer makes `readDir` throw and
-  `%2541` is no longer read as `A`. Surrounding whitespace is trimmed from
+  `%2541` is no longer read as `A`. Raw non-ASCII characters in hrefs are
+  kept instead of making parsing throw. Surrounding whitespace is trimmed from
   hrefs and lock tokens.
 - Multi-Status parsing only reads the `DAV:response` children of the root, so
   property values containing `response` elements no longer add phantom
