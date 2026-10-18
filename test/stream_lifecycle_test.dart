@@ -40,9 +40,10 @@ void main() {
       });
 
       // The timeout should fire after 500ms since the stream never completes
-      expect(
-        () => client.readFile('/slow', '${tmpDir.path}/out.bin'),
-        throwsA(anything),
+      final out = File('${tmpDir.path}/out.bin');
+      await expectLater(
+        client.readFile('/slow', out.path),
+        throwsA(isA<WebdavException>()),
       );
     });
   });
@@ -85,9 +86,9 @@ void main() {
       Future.delayed(
           const Duration(milliseconds: 100), () => cancelToken.cancel('test'));
 
-      expect(
-        () => client.readFile('/cancel', '${tmpDir.path}/out.bin',
-            cancelToken: cancelToken),
+      final out = File('${tmpDir.path}/out.bin');
+      await expectLater(
+        client.readFile('/cancel', out.path, cancelToken: cancelToken),
         throwsA(anything),
       );
     });
