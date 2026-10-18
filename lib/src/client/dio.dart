@@ -1,6 +1,6 @@
 part of 'client.dart';
 
-final _httpPrefixReg = RegExp('(http|https)://');
+final _httpPrefixReg = RegExp('https?://', caseSensitive: false);
 
 /// Thin wrapper around `dio` that injects WebDAV-specific behaviour such as
 /// automatic auth retries, base URL resolution and RFC 4918 error translation.

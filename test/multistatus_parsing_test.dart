@@ -111,6 +111,10 @@ void main() {
       expect(created('2024-01-15T10:30:00Z'), expected);
       expect(created('2024-01-15t10:30:00z'), expected);
       expect(created('Mon, 15 Jan 2024 10:30:00 GMT'), expected);
+      expect(created('2024-02-30T10:00:00Z'), isNull);
+      expect(created('2024-01-15T24:00:00Z'), isNull);
+      expect(created('20240115'), isNull);
+      expect(created('2024-01-15 10:30'), isNull);
     });
 
     test('reads two-digit RFC 850 years per RFC 9110 §5.6.7', () {
@@ -128,6 +132,28 @@ void main() {
       final future = (now + 60) % 100;
       expect(year('$future'.padLeft(2, '0')), century + future - 100);
     });
+  });
+
+  test('response-level fields come from the DAV: namespace only', () {
+    final response = parseMultiStatus(_multiStatus(
+      '''
+<d:response>
+  <d:href>/dav/f</d:href>
+  <x:status>HTTP/1.1 500 Internal Server Error</x:status>
+  <x:responsedescription>foreign</x:responsedescription>
+  <d:status>HTTP/1.1 200 OK</d:status>
+</d:response>''',
+      ns: ' xmlns:x="urn:x"',
+    )).single;
+    expect(response.statusCode, 200);
+    expect(response.responseDescription, isNull);
+  });
+
+  test('absolute URLs are recognised whatever the scheme case', () {
+    expect(
+      resolveAgainstBaseUrl('http://h/dav/', 'HTTP://other/x'),
+      'http://other/x',
+    );
   });
 
   test('PROPPATCH reports response-level failures', () {
@@ -171,6 +197,13 @@ void main() {
         final props = await client.propFind(path, depth: PropsDepth.one);
         expect(props['{DAV:}displayname']?.innerText, 'dir', reason: path);
       }
+    });
+
+    test('propFind ignores a sole entry for another resource', () async {
+      reply = (_) => _multiStatus(
+            _response('/dav/other', '<d:displayname>other</d:displayname>'),
+          );
+      expect(await client.propFind('/dir'), isEmpty);
     });
 
     test('modifyProps gives set and remove namespaces distinct prefixes',

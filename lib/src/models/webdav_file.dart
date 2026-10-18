@@ -100,7 +100,7 @@ class WebdavFile {
       if (propstat == null) continue;
 
       // Find and process prop element
-      final prop = findElements(propstat, 'prop').firstOrNull;
+      final prop = davChild(propstat, 'prop');
       if (prop == null) continue;
 
       if (skipSelf && normalizedBaseHref != null) {
@@ -199,8 +199,8 @@ class WebdavFile {
 
 /// Find the first successful propstat element
 XmlElement? _findSuccessfulPropstat(XmlElement response) {
-  for (final propstat in findElements(response, 'propstat')) {
-    final statusText = getElementText(propstat, 'status');
+  for (final propstat in davChildren(response, 'propstat')) {
+    final statusText = davChild(propstat, 'status')?.innerText;
     if (statusText == null) {
       continue;
     }
@@ -231,9 +231,25 @@ int? _davInt(XmlElement prop, String name) {
 
 /// Parse an RFC 3339 date, whose `T` and `Z` may be lowercase (§5.6).
 DateTime? _parseIsoDate(String? value) {
-  if (value == null || value.isEmpty) return null;
+  if (value == null) return null;
+  final match = _rfc3339.firstMatch(value);
+  if (match == null) return null;
+  int part(int group) => int.parse(match[group]!);
+  final year = part(1);
+  final month = part(2);
+  final day = part(3);
+  // DateTime.parse rolls invalid fields over (Feb 30 becomes Mar 1).
+  if (month < 1 || month > 12) return null;
+  if (day < 1 || day > DateTime.utc(year, month + 1, 0).day) return null;
+  if (part(4) > 23 || part(5) > 59 || part(6) > 59) return null;
   return DateTime.tryParse(value.toUpperCase())?.toLocal();
 }
+
+/// RFC 3339 §5.6 `date-time`, with `T` and `Z` in either case.
+final _rfc3339 = RegExp(
+  r'^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(?:\.\d+)?'
+  r'(?:[Zz]|[+-](?:[01]\d|2[0-3]):[0-5]\d)$',
+);
 
 /// Parse HTTP date formats accepted by RFC 9110 §5.6.7.
 DateTime? _parseHttpDate(String? httpDate) {

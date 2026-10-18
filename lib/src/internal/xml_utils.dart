@@ -40,11 +40,19 @@ Iterable<XmlElement> multiStatusResponses(XmlDocument document) {
   if (root.localName != 'multistatus' || root.namespaceUri != 'DAV:') {
     return const <XmlElement>[];
   }
-  return root.findElements('response', namespaceUri: 'DAV:');
+  return davChildren(root, 'response');
 }
+
+/// Direct `DAV:` children of [element] named [name].
+Iterable<XmlElement> davChildren(XmlElement element, String name) =>
+    element.findElements(name, namespaceUri: 'DAV:');
+
+/// First direct `DAV:` child of [element] named [name], or `null`.
+XmlElement? davChild(XmlElement element, String name) =>
+    element.getElement(name, namespaceUri: 'DAV:');
 
 /// Trimmed text of the `DAV:href` child of [element], or `null`.
 String? hrefText(XmlElement element) {
-  final text = element.getElement('href', namespaceUri: 'DAV:')?.innerText.trim();
+  final text = davChild(element, 'href')?.innerText.trim();
   return text == null || text.isEmpty ? null : text;
 }

@@ -739,13 +739,9 @@ extension WebdavClientPropfind on WebdavClient {
 
     // Keys are decoded server hrefs, which carry the base URL's path.
     final target = _hrefPathKey(decodeHref(Uri.parse(absoluteUrl(path)).path));
-    var statusMap = raw.entries
+    final statusMap = raw.entries
         .firstWhereOrNull((entry) => _hrefPathKey(entry.key) == target)
         ?.value;
-
-    if (statusMap == null && raw.length == 1) {
-      statusMap = raw.values.single;
-    }
     if (statusMap == null) {
       return const <String, XmlElement>{};
     }

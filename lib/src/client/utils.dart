@@ -64,25 +64,15 @@ List<MultiStatusResponse> parseMultiStatus(String xmlString) {
     final href = hrefText(responseElement);
     final decodedHref = href != null ? decodeHref(href) : '';
 
-    final overallStatusElement = responseElement.childElements.firstWhereOrNull(
-      (element) =>
-          element.name.local == 'status' &&
-          element.parentElement == responseElement,
-    );
+    final overallStatusElement = davChild(responseElement, 'status');
     final overallStatusText = overallStatusElement?.innerText;
     final overallStatusCode =
         overallStatusText != null ? parseStatusLine(overallStatusText) : null;
 
-    final errorElement = responseElement.childElements.firstWhereOrNull(
-      (element) => element.name.local == 'error',
-    );
+    final errorElement = davChild(responseElement, 'error');
     final responseDescriptionElement =
-        responseElement.childElements.firstWhereOrNull(
-      (element) => element.name.local == 'responsedescription',
-    );
-    final locationElement = responseElement.childElements.firstWhereOrNull(
-      (element) => element.name.local == 'location',
-    );
+        davChild(responseElement, 'responsedescription');
+    final locationElement = davChild(responseElement, 'location');
 
     String? responseDescription;
     if (responseDescriptionElement != null) {
@@ -94,7 +84,7 @@ List<MultiStatusResponse> parseMultiStatus(String xmlString) {
 
     String? locationHref;
     if (locationElement != null) {
-      final hrefElement = findElements(locationElement, 'href').firstOrNull;
+      final hrefElement = davChild(locationElement, 'href');
       if (hrefElement != null) {
         final hrefText = hrefElement.innerText.trim();
         if (hrefText.isNotEmpty) {
@@ -104,13 +94,13 @@ List<MultiStatusResponse> parseMultiStatus(String xmlString) {
     }
 
     final propstats = <MultiStatusPropstat>[];
-    for (final propstatElement in findElements(responseElement, 'propstat')) {
-      final statusElement = findElements(propstatElement, 'status').firstOrNull;
+    for (final propstatElement in davChildren(responseElement, 'propstat')) {
+      final statusElement = davChild(propstatElement, 'status');
       final statusText = statusElement?.innerText;
       final statusCode =
           statusText != null ? parseStatusLine(statusText) : null;
 
-      final propElement = findElements(propstatElement, 'prop').firstOrNull;
+      final propElement = davChild(propstatElement, 'prop');
       final properties = <String, XmlElement>{};
       if (propElement != null) {
         for (final prop in propElement.childElements) {

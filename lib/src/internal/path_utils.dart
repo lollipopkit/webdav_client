@@ -21,6 +21,8 @@ String joinPath(String path0, String path1) {
           : '$path0/$path1';
 }
 
+final _absoluteHttpUrl = RegExp('https?://', caseSensitive: false);
+
 /// Resolve [target] against [baseUrl] in a WebDAV-aware manner.
 ///
 /// Preserves percent-encoding of special characters (such as `%2F` for `/`)
@@ -39,7 +41,8 @@ String resolveAgainstBaseUrl(String baseUrl, String target) {
     return Uri.parse(baseUrl).toString();
   }
 
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+  // Schemes are case-insensitive (RFC 3986 §3.1).
+  if (trimmed.startsWith(_absoluteHttpUrl)) {
     return Uri.parse(trimmed).toString();
   }
 
