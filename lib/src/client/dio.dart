@@ -17,12 +17,19 @@ class _WdDio with DioMixin {
     this.options.validateStatus = (status) => true;
 
     httpClientAdapter = getAdapter();
-    // A composed content-type cannot be unset through Options, only on the
-    // final RequestOptions.
+    // dio merges client-wide headers after Options, so headers a request
+    // must not carry are dropped from the final RequestOptions.
     interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) {
-        if (options.extra.remove(_dropContentTypeKey) == true) {
-          options.contentType = null;
+        final drop = options.extra.remove(_dropHeadersKey);
+        if (drop is Set<String>) {
+          final keys = options.headers.keys
+              .where((key) => drop.contains(key.toLowerCase()))
+              .toList();
+          keys.forEach(options.headers.remove);
+          if (drop.contains(Headers.contentTypeHeader)) {
+            options.contentType = null;
+          }
         }
         handler.next(options);
       },
@@ -96,7 +103,7 @@ class _WdDio with DioMixin {
       options.headers?['authorization'] = authStr;
     }
     if (stripSensitiveRedirectHeaders) {
-      _stripSensitiveRedirectHeaders(options.headers);
+      _dropHeaders(options, _sensitiveRedirectHeaders);
     }
     final resp = await requestUri<T>(
       uri,
@@ -252,15 +259,7 @@ class _WdDio with DioMixin {
           optionsHandler: seeOther
               ? (Options options) {
                   optionsHandler?.call(options);
-                  options.headers?.removeWhere(
-                    (key, _) => _entityHeaders.contains(key.toLowerCase()),
-                  );
-                  // Null overrides the client-wide headers dio merges in;
-                  // content-type is dropped by the interceptor instead.
-                  for (final key in _entityHeaders) {
-                    if (key != 'content-type') options.headers?[key] = null;
-                  }
-                  options.extra = {...?options.extra, _dropContentTypeKey: true};
+                  _dropHeaders(options, _entityHeaders);
                 }
               : optionsHandler,
           onSendProgress: onSendProgress,
@@ -313,40 +312,13 @@ class _WdDio with DioMixin {
     return normalized == 'GET' || normalized == 'HEAD';
   }
 
-  void _stripSensitiveRedirectHeaders(Map<String, dynamic>? headers) {
-    if (headers == null) return;
-    headers.removeWhere(
-      (key, _) => _sensitiveRedirectHeaders.contains(key.toLowerCase()),
-    );
-    // Null overrides the client-wide headers that dio merges in later.
-    for (final key in _sensitiveRedirectHeaders) {
-      headers[key] = null;
-    }
-  }
-
-  bool _sameOrigin(Uri a, Uri b) {
-    final schemeA = a.scheme.toLowerCase();
-    final schemeB = b.scheme.toLowerCase();
-    if (schemeA != schemeB) {
-      return false;
-    }
-    if (a.host.toLowerCase() != b.host.toLowerCase()) {
-      return false;
-    }
-    int defaultPort(String scheme) {
-      switch (scheme) {
-        case 'https':
-          return 443;
-        case 'http':
-          return 80;
-        default:
-          return 0;
-      }
-    }
-
-    final portA = a.hasPort ? a.port : defaultPort(schemeA);
-    final portB = b.hasPort ? b.port : defaultPort(schemeB);
-    return portA == portB;
+  /// Keep [names] (lowercase) off the request, including client-wide ones
+  /// that dio merges in after [options]; the interceptor removes those.
+  void _dropHeaders(Options options, Set<String> names) {
+    options.headers?.removeWhere((key, _) => names.contains(key.toLowerCase()));
+    final extra = options.extra ??= {};
+    final dropped = extra[_dropHeadersKey] as Set<String>?;
+    extra[_dropHeadersKey] = {...?dropped, ...names};
   }
 
   /// Read an unsuccessful streamed response into a [WebdavException], so the
@@ -619,28 +591,14 @@ class _WdDio with DioMixin {
 
     final status = resp.statusCode ?? -1;
     if (status == 207) {
-      final body = resp.data;
-      if (body is! String) {
+      final failures = _parseXmlBody(
+        resp,
+        'Multi-Status',
+        parseMultiStatusFailureMessages,
+      );
+      if (failures.isNotEmpty) {
         throw WebdavException(
-          message: 'Multi-Status response did not include text body to inspect',
-          statusCode: status,
-          statusMessage: resp.statusMessage,
-          response: resp,
-        );
-      }
-      try {
-        final failures = parseMultiStatusFailureMessages(body);
-        if (failures.isNotEmpty) {
-          throw WebdavException(
-            message: failures.join('; '),
-            statusCode: status,
-            statusMessage: resp.statusMessage,
-            response: resp,
-          );
-        }
-      } on XmlException catch (error) {
-        throw WebdavException(
-          message: 'Unable to parse Multi-Status response: $error',
+          message: failures.join('; '),
           statusCode: status,
           statusMessage: resp.statusMessage,
           response: resp,
@@ -779,22 +737,24 @@ class _WdDio with DioMixin {
 
     late StreamSubscription<Uint8List> subscription;
     Future<Null>? asyncWrite;
-    // Shared so every failure path waits for the same cleanup before the
-    // caller sees the error.
+    // Shared so every path waits for the same close, and a cancel after a
+    // successful download cannot delete it.
     Future<void>? closing;
 
+    /// Close and remove the partial file. Never throws: the caller already
+    /// gets the error that started the cleanup.
     Future<void> closeAndDelete({bool awaitWrite = true}) =>
         closing ??= () async {
           try {
             if (awaitWrite) await asyncWrite;
             await fileReader.close();
-          } finally {
-            // Delete even when closing failed, so no partial file remains.
-            try {
-              await file.delete();
-            } on PathNotFoundException {
-              // The caller may have removed the partial download already.
-            }
+          } catch (_) {
+            // Still delete below.
+          }
+          try {
+            await file.delete();
+          } catch (_) {
+            // Already gone, or nothing more can be done.
           }
         }();
 
@@ -833,12 +793,24 @@ class _WdDio with DioMixin {
         });
       },
       onDone: () async {
-        try {
-          await asyncWrite;
-          await (closing ??= fileReader.close());
-          if (!completer.isCompleted) completer.complete(resp);
-        } catch (err) {
-          fail(err);
+        Object? closeError;
+        await (closing ??= () async {
+          try {
+            await asyncWrite;
+            await fileReader.close();
+          } catch (err) {
+            closeError = err;
+            try {
+              await file.delete();
+            } catch (_) {
+              // Report closeError regardless.
+            }
+          }
+        }());
+        if (closeError != null) {
+          fail(closeError!);
+        } else if (!completer.isCompleted) {
+          completer.complete(resp);
         }
       },
       onError: (Object e) async {
@@ -1135,13 +1107,26 @@ const _parentMkcolFilteredHeaders = <String>{
   ..._entityHeaders,
 };
 
-const _dropContentTypeKey = 'webdav_client_plus.dropContentType';
+const _dropHeadersKey = 'webdav_client_plus.dropHeaders';
 
 const _sensitiveRedirectHeaders = <String>{
   'authorization',
   'cookie',
   'proxy-authorization',
 };
+
+/// Whether [a] and [b] share scheme, host and port (RFC 6454 §5), treating a
+/// missing scheme as http and a missing port as the scheme's default.
+bool _sameOrigin(Uri a, Uri b) {
+  String scheme(Uri uri) =>
+      uri.scheme.isEmpty ? 'http' : uri.scheme.toLowerCase();
+  int port(Uri uri) => uri.hasPort
+      ? uri.port
+      : switch (scheme(uri)) { 'https' => 443, 'http' => 80, _ => 0 };
+  return scheme(a) == scheme(b) &&
+      a.host.toLowerCase() == b.host.toLowerCase() &&
+      port(a) == port(b);
+}
 
 bool _isSuccessfulReadStatus(int? statusCode) =>
     statusCode == 200 || statusCode == 206;
@@ -1204,7 +1189,7 @@ extension on _WdDio {
     }
 
     if (resolvedUri != null && resolvedUri.hasAuthority) {
-      if (_hasAuthority(baseUri) && !_authoritiesMatch(baseUri, resolvedUri)) {
+      if (_hasAuthority(baseUri) && !_sameOrigin(baseUri, resolvedUri)) {
         return null;
       }
       if (!_hasAuthority(baseUri)) {
@@ -1263,35 +1248,6 @@ extension on _WdDio {
 
   /// True when the URI contains authority information (host/port).
   bool _hasAuthority(Uri uri) => uri.host.isNotEmpty || uri.hasAuthority;
-
-  /// Compare two authorities, accounting for implicit default ports.
-  bool _authoritiesMatch(Uri a, Uri b) {
-    final schemeA = a.scheme.isEmpty ? 'http' : a.scheme;
-    final schemeB = b.scheme.isEmpty ? 'http' : b.scheme;
-    if (schemeA.toLowerCase() != schemeB.toLowerCase()) {
-      return false;
-    }
-    final hostA = a.host.toLowerCase();
-    final hostB = b.host.toLowerCase();
-    if (hostA != hostB) {
-      return false;
-    }
-    final portA = a.hasPort ? a.port : _defaultPortForScheme(schemeA);
-    final portB = b.hasPort ? b.port : _defaultPortForScheme(schemeB);
-    return portA == portB;
-  }
-
-  /// Return the conventional port for a scheme when none was provided.
-  int _defaultPortForScheme(String scheme) {
-    switch (scheme.toLowerCase()) {
-      case 'https':
-        return 443;
-      case 'http':
-        return 80;
-      default:
-        return 0;
-    }
-  }
 
   /// Derive the server-relative path from a potentially absolute target.
   String _serverPathFromTarget(String target) {

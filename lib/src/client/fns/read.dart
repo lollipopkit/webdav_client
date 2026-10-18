@@ -33,8 +33,9 @@ extension WebdavClientRead on WebdavClient {
     );
 
     // Hrefs include the base URL's path, so compare against the resolved URL.
-    return _parsePropfind(
+    return _parseXmlBody(
       resp,
+      'PROPFIND',
       (body) => WebdavFile.parseFiles(absoluteUrl(path), body),
     );
   }
@@ -68,8 +69,9 @@ extension WebdavClientRead on WebdavClient {
       headers: headers,
     );
 
-    return _parsePropfind(
+    return _parseXmlBody(
       resp,
+      'PROPFIND',
       (body) => WebdavFile.parseFiles(path, body, skipSelf: false).firstOrNull,
     );
   }

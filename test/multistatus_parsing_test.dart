@@ -289,6 +289,18 @@ void main() {
       );
     });
 
+    test('lock reports a malformed body as WebdavException', () async {
+      reply = (_) => 'not-xml';
+      await expectLater(
+        client.lock('/f'),
+        throwsA(isA<WebdavException>().having(
+          (e) => e.message,
+          'message',
+          contains('Unable to parse LOCK response'),
+        )),
+      );
+    });
+
     test('lock trims a token read from the body', () async {
       reply = (_) => '''
 <?xml version="1.0" encoding="utf-8"?>

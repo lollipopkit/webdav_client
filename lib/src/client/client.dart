@@ -1050,8 +1050,9 @@ class WebdavClient {
       headers: headers,
     );
 
-    final file = _parsePropfind(
+    final file = _parseXmlBody(
       resp,
+      'PROPFIND',
       (body) => WebdavFile.parseFiles(path, body, skipSelf: false).firstOrNull,
     );
     if (file == null) {

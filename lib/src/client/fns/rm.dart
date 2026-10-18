@@ -43,41 +43,20 @@ extension WebdavClientRm on WebdavClient {
       return;
     }
     if (status == 207) {
-      final body = resp.data;
-      if (body is! String || body.isEmpty) {
-        throw WebdavException(
-          message:
-              'DELETE returned 207 Multi-Status without an XML response body to inspect',
-          statusCode: status,
-          statusMessage: resp.statusMessage,
-          response: resp,
-        );
-      }
-      try {
-        final failures = parseMultiStatusFailureMessages(body);
-        if (failures.isEmpty) {
-          // RFC 4918 §8.7 requires Multi-Status to describe at least one member.
-          throw WebdavException(
-            message: 'DELETE reported Multi-Status but no member failures',
-            statusCode: status,
-            statusMessage: resp.statusMessage,
-            response: resp,
-          );
-        }
-        throw WebdavException(
-          message: failures.join('; '),
-          statusCode: status,
-          statusMessage: resp.statusMessage,
-          response: resp,
-        );
-      } on XmlException catch (error) {
-        throw WebdavException(
-          message: 'Unable to parse DELETE Multi-Status response: $error',
-          statusCode: status,
-          statusMessage: resp.statusMessage,
-          response: resp,
-        );
-      }
+      final failures = _parseXmlBody(
+        resp,
+        'DELETE Multi-Status',
+        parseMultiStatusFailureMessages,
+      );
+      throw WebdavException(
+        // RFC 4918 §8.7 requires Multi-Status to describe at least one member.
+        message: failures.isEmpty
+            ? 'DELETE reported Multi-Status but no member failures'
+            : failures.join('; '),
+        statusCode: status,
+        statusMessage: resp.statusMessage,
+        response: resp,
+      );
     }
     throw _newResponseError(resp);
   }

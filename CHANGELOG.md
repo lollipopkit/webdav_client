@@ -16,17 +16,25 @@
 - `Auth.authorize` takes an optional `body` and `DigestAuth.authorize` returns
   `String?`: `null` before a challenge is known or when its algorithm is not
   supported, instead of an MD5 response.
-
-### Added
-
 - The library re-exports the dio and xml types used in its public API
   (`CancelToken`, `DioException`, `DioExceptionType`, `Options`,
   `ProgressCallback`, `Response`, `ResponseBody`, `ResponseType`, `XmlElement`
   and its find/string extensions), so callers no longer need direct `dio` /
-  `xml` dependencies.
+  `xml` dependencies. Code that also imports another library exporting one of
+  these names, such as `Response` from `package:http`, needs a prefix or
+  `hide` on one of the imports.
 
 ### Fixed
 
+- Headers a request must not carry (sensitive ones after a cross-origin
+  redirect, entity ones on a 303 GET) are removed from the final request
+  instead of being set to `null`, which the web adapter sent as the literal
+  value `null`.
+- `readFile` cleanup no longer raises unhandled async errors when closing or
+  deleting the partial file fails, and a failed close after the last chunk
+  also removes the file.
+- `lock()` reports a malformed response body as `WebdavException` instead of
+  leaking an `XmlParserException`.
 - `readDir`, `readProps`, `propFind` and `quotaBytes` report a PROPFIND
   response with an empty or malformed body as `WebdavException` instead of
   leaking an `XmlParserException` (or a cast error from `quotaBytes`).

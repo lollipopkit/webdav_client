@@ -867,7 +867,7 @@ extension WebdavClientPropfind on WebdavClient {
       headers: headers,
     );
 
-    final rawMap = _parsePropfind(resp, parseMultiStatusToMap);
+    final rawMap = _parseXmlBody(resp, 'PROPFIND', parseMultiStatusToMap);
     if (rawMap.isEmpty) {
       return const {};
     }
@@ -917,15 +917,8 @@ final _schemeAuthorityReg = RegExp('^[A-Za-z][A-Za-z0-9+.-]*://[^/]*');
 bool _hrefOriginMatches(String decodedHref, Uri target) {
   final origin = _schemeAuthorityReg.firstMatch(decodedHref)?[0];
   if (origin == null) return true;
-  final Uri uri;
-  try {
-    uri = Uri.parse(origin);
-  } on FormatException {
-    return false;
-  }
-  return uri.scheme == target.scheme.toLowerCase() &&
-      uri.host == target.host.toLowerCase() &&
-      uri.port == target.port;
+  final uri = Uri.tryParse(origin);
+  return uri != null && _sameOrigin(uri, target);
 }
 
 /// Path of a decoded href without scheme, authority or trailing slash.
