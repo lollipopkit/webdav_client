@@ -202,15 +202,18 @@ T _parseXmlBody<T>(
 
 List<String> parsePropPatchFailureMessages(String xmlString) =>
     _multiStatusFailures(
-      xmlString,
+      parseMultiStatus(xmlString),
       action: 'update properties for',
       propsLabel: 'Failed props',
       alwaysListProps: true,
     );
 
 List<String> parseMultiStatusFailureMessages(String xmlString) =>
+    _memberFailures(parseMultiStatus(xmlString));
+
+List<String> _memberFailures(List<MultiStatusResponse> responses) =>
     _multiStatusFailures(
-      xmlString,
+      responses,
       action: 'process',
       propsLabel: 'Props',
       alwaysListProps: false,
@@ -220,14 +223,14 @@ List<String> parseMultiStatusFailureMessages(String xmlString) =>
 /// §14.22 require a status for each propstat and a status or propstats for
 /// each response, so a missing or unparsable one counts as a failure.
 List<String> _multiStatusFailures(
-  String xmlString, {
+  List<MultiStatusResponse> responses, {
   required String action,
   required String propsLabel,
   required bool alwaysListProps,
 }) {
   final failures = <String>[];
 
-  for (final response in parseMultiStatus(xmlString)) {
+  for (final response in responses) {
     final description = response.responseDescription;
     final descriptionSuffix = description == null ? '' : '. $description';
 

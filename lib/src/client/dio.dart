@@ -591,11 +591,12 @@ class _WdDio with DioMixin {
 
     final status = resp.statusCode ?? -1;
     if (status == 207) {
-      final failures = _parseXmlBody(
-        resp,
-        'Multi-Status',
-        parseMultiStatusFailureMessages,
-      );
+      final responses = _parseXmlBody(resp, 'Multi-Status', parseMultiStatus);
+      // RFC 4918 §9.8.5: a 207 means errors kept the operation from finishing,
+      // so one naming no member cannot be read as success.
+      final failures = responses.isEmpty
+          ? ['$method reported Multi-Status without any member']
+          : _memberFailures(responses);
       if (failures.isNotEmpty) {
         throw WebdavException(
           message: failures.join('; '),

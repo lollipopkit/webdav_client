@@ -63,7 +63,11 @@
   set through `setHeaders`, and keeps HEAD as HEAD. A `Location` that cannot be parsed is no longer followed in a loop,
   and a redirect that is not followed keeps its body for the caller.
 - COPY/MOVE retries a 409 once after creating the parent instead of looping,
-  and no longer sends the `If` header and conditions to the parent MKCOL.
+  and no longer sends the `If` header and conditions to the parent MKCOL. A
+  207 that names no member fails instead of passing as success, since
+  RFC 4918 §9.8.5 sends 207 only when errors stopped the operation.
+- `readProps` and `quotaBytes` use the response entry for the requested
+  resource instead of the first one when a Depth 0 reply lists others.
 - Download progress treats any `Content-Encoding` other than `identity` as
   compressed.
 - `readDir` no longer returns the requested collection itself when the base

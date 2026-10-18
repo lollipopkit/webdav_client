@@ -311,10 +311,41 @@ void main() {
       });
     });
 
-    test('COPY accepts a Multi-Status with no responses', () async {
-      // RFC 4918 §14.16 allows zero DAV:response elements.
+    test('COPY fails on a Multi-Status naming no member', () async {
+      // RFC 4918 §9.8.5: a COPY 207 reports errors that stopped the copy.
       reply = (_) => _multiStatus('');
-      await client.copy('/a', '/b');
+      await expectLater(
+        client.copy('/a', '/b'),
+        throwsA(isA<WebdavException>().having(
+          (e) => e.message,
+          'message',
+          contains('COPY reported Multi-Status without any member'),
+        )),
+      );
+    });
+
+    group('Depth 0 responses listing other resources', () {
+      setUp(() => reply = (_) => _multiStatus(
+            _response(
+              '/dav/other',
+              '<d:quota-used-bytes>1</d:quota-used-bytes>'
+                  '<d:quota-available-bytes>1</d:quota-available-bytes>',
+            ) +
+                _response(
+                  '/dav/',
+                  '<d:quota-used-bytes>5</d:quota-used-bytes>'
+                      '<d:quota-available-bytes>7</d:quota-available-bytes>',
+                ),
+          ));
+
+      test('readProps returns the requested resource', () async {
+        final file = await client.readProps('/');
+        expect(file?.path, '/dav/');
+      });
+
+      test('quotaBytes reads the requested resource', () async {
+        expect(await client.quotaBytes(), (5, 7));
+      });
     });
 
     test('lock reports a malformed body as WebdavException', () async {

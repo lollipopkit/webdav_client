@@ -1039,21 +1039,11 @@ class WebdavClient {
     Map<String, dynamic>? headers,
     CancelToken? cancelToken,
   }) async {
-    final resp = await _client.wdPropfind(
+    final file = await readProps(
       path,
-      PropsDepth.zero,
-      PropfindType.prop.buildXmlStr([
-        'quota-available-bytes',
-        'quota-used-bytes',
-      ]),
-      cancelToken: cancelToken,
+      properties: const ['quota-available-bytes', 'quota-used-bytes'],
       headers: headers,
-    );
-
-    final file = _parseXmlBody(
-      resp,
-      'PROPFIND',
-      (body) => WebdavFile.parseFiles(path, body, skipSelf: false).firstOrNull,
+      cancelToken: cancelToken,
     );
     if (file == null) {
       throw WebdavException(

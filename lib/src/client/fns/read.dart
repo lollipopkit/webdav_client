@@ -54,8 +54,6 @@ extension WebdavClientRead on WebdavClient {
     Map<String, String> namespaces = const <String, String>{},
     Map<String, dynamic>? headers,
   }) async {
-    // path = _fixSlashes(path);
-
     final xmlStr = findType.buildXmlStr(
       properties,
       namespaceMap: namespaces,
@@ -69,10 +67,13 @@ extension WebdavClientRead on WebdavClient {
       headers: headers,
     );
 
+    // Depth 0 may still list other resources; pick the one requested.
+    final target = Uri.parse(absoluteUrl(path));
     return _parseXmlBody(
       resp,
       'PROPFIND',
-      (body) => WebdavFile.parseFiles(path, body, skipSelf: false).firstOrNull,
+      (body) => WebdavFile.parseFiles(path, body, skipSelf: false)
+          .firstWhereOrNull((file) => _hrefIsTarget(file.path, target)),
     );
   }
 
