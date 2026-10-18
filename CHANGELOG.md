@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- The library re-exports the dio and xml types used in its public API
+  (`CancelToken`, `DioException`, `DioExceptionType`, `Response`,
+  `ResponseBody`, `XmlElement` and its find/string extensions), so callers no
+  longer need direct `dio` / `xml` dependencies.
+
 ### Fixed
 
 - `readDir` no longer returns the requested collection itself when the base

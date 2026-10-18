@@ -4,6 +4,12 @@
 /// extension helpers.
 library;
 
+// Types from dependencies that appear in the public API.
+export 'package:dio/dio.dart'
+    show CancelToken, DioException, DioExceptionType, Response, ResponseBody;
+export 'package:xml/xml.dart'
+    show XmlElement, XmlFindExtension, XmlStringExtension;
+
 export 'src/auth.dart';
 export 'src/client/client.dart';
 export 'src/enums.dart';
