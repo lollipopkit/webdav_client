@@ -78,7 +78,9 @@
   hrefs and lock tokens.
 - Multi-Status parsing only reads the `DAV:response` children of the root, so
   property values containing `response` elements no longer add phantom
-  entries. Response, propstat and status elements must be in `DAV:`.
+  entries. Response, propstat and status elements must be in `DAV:`, and a
+  207 whose root is not `DAV:multistatus` is reported as malformed instead of
+  as an empty success.
 - `WebdavFile` reads its fields from `DAV:` properties only; a same-named
   property in another namespace stays in `customProps`. `creationdate` also
   accepts HTTP dates and lowercase RFC 3339, rejects dates outside the

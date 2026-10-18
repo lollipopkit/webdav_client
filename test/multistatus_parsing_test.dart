@@ -289,6 +289,34 @@ void main() {
       );
     });
 
+    group('a 207 whose root is not DAV:multistatus', () {
+      setUp(() => reply = (_) => '<x:other xmlns:x="urn:x"/>');
+
+      test('fails COPY instead of reporting success', () async {
+        await expectLater(
+          client.copy('/a', '/b'),
+          throwsA(isA<WebdavException>().having(
+            (e) => e.message,
+            'message',
+            contains('Expected a DAV:multistatus root'),
+          )),
+        );
+      });
+
+      test('fails readDir instead of listing nothing', () async {
+        await expectLater(
+          client.readDir('/'),
+          throwsA(isA<WebdavException>()),
+        );
+      });
+    });
+
+    test('COPY accepts a Multi-Status with no responses', () async {
+      // RFC 4918 §14.16 allows zero DAV:response elements.
+      reply = (_) => _multiStatus('');
+      await client.copy('/a', '/b');
+    });
+
     test('lock reports a malformed body as WebdavException', () async {
       reply = (_) => 'not-xml';
       await expectLater(
