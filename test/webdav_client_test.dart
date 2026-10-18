@@ -6,7 +6,6 @@ import 'dart:typed_data';
 import 'package:test/test.dart';
 import 'package:webdav_client_plus/webdav_client_plus.dart';
 
-const _baseTestDir = '.test';
 const _testDir = 'test dir';
 const _testDir2 = 'test dir2';
 const _testFile = 'README.md';
@@ -35,12 +34,6 @@ void main() {
     });
 
     setUp(() async {
-      final baseDir = Directory(_baseTestDir);
-      if (baseDir.existsSync()) {
-        await baseDir.delete(recursive: true);
-      }
-      await baseDir.create();
-
       client.setHeaders({'accept-charset': 'utf-8'});
       client.setConnectTimeout(8000);
       client.setSendTimeout(8000);
