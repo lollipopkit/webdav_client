@@ -30,7 +30,9 @@
 - `modifyProps` no longer gives set and remove properties in different
   namespaces the same prefix, which sent the wrong property.
 - `setProps`, `modifyProps` and `propPatch` throw when a 207 carries a
-  response-level error status.
+  response-level error status. PROPPATCH, COPY and MOVE treat a propstat or
+  response with a missing or unparsable `DAV:status` as failed instead of
+  successful.
 
 ## [2.0.0]
 

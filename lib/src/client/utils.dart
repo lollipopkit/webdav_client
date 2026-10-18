@@ -175,70 +175,64 @@ Map<String, Map<int, Map<String, XmlElement>>> parseMultiStatusToMap(
   return result;
 }
 
-List<String> parsePropPatchFailureMessages(String xmlString) {
-  final responses = parseMultiStatus(xmlString);
+List<String> parsePropPatchFailureMessages(String xmlString) =>
+    _multiStatusFailures(
+      xmlString,
+      action: 'update properties for',
+      propsLabel: 'Failed props',
+      alwaysListProps: true,
+    );
+
+List<String> parseMultiStatusFailureMessages(String xmlString) =>
+    _multiStatusFailures(
+      xmlString,
+      action: 'process',
+      propsLabel: 'Props',
+      alwaysListProps: false,
+    );
+
+/// Describe every failed entry of a Multi-Status body. RFC 4918 §14.24 and
+/// §14.22 require a status for each propstat and a status or propstats for
+/// each response, so a missing or unparsable one counts as a failure.
+List<String> _multiStatusFailures(
+  String xmlString, {
+  required String action,
+  required String propsLabel,
+  required bool alwaysListProps,
+}) {
   final failures = <String>[];
 
-  for (final response in responses) {
-    final responseStatus = response.statusCode;
-    if (responseStatus != null && responseStatus >= 400) {
-      final statusText = response.rawStatus ?? 'HTTP status $responseStatus';
-      final description = response.responseDescription;
-      final descriptionSuffix = description == null ? '' : '. $description';
+  for (final response in parseMultiStatus(xmlString)) {
+    final description = response.responseDescription;
+    final descriptionSuffix = description == null ? '' : '. $description';
+
+    String? failedStatus(int? code, String? raw) {
+      if (code != null) return code >= 400 ? raw ?? 'HTTP status $code' : null;
+      return raw == null ? 'missing status' : 'invalid status "$raw"';
+    }
+
+    final responseFailure =
+        response.rawStatus != null || response.propstats.isEmpty
+            ? failedStatus(response.statusCode, response.rawStatus)
+            : null;
+    if (responseFailure != null) {
       failures.add(
-        'Failed to update properties for ${response.href}: '
-        '$statusText$descriptionSuffix',
+        'Failed to $action ${response.href}: $responseFailure'
+        '$descriptionSuffix',
       );
     }
 
     for (final propstat in response.propstats) {
-      final status = propstat.statusCode;
-      if (status != null && status >= 400) {
-        final propNames =
-            propstat.properties.values.map(_formatPropertyName).toList();
-        final statusText = propstat.rawStatus ?? 'HTTP status $status';
-        final description = response.responseDescription;
-        final descriptionSuffix = description == null ? '' : '. $description';
-        failures.add(
-          'Failed to update properties for ${response.href}: '
-          '$statusText. Failed props: $propNames$descriptionSuffix',
-        );
-      }
-    }
-  }
-
-  return failures;
-}
-
-List<String> parseMultiStatusFailureMessages(String xmlString) {
-  final responses = parseMultiStatus(xmlString);
-  final failures = <String>[];
-
-  for (final response in responses) {
-    final status = response.statusCode;
-    if (status != null && status >= 400) {
-      final statusText = response.rawStatus ?? 'HTTP status $status';
-      final description = response.responseDescription;
-      final descriptionSuffix = description == null ? '' : '. $description';
-      failures.add(
-        'Failed to process ${response.href}: $statusText$descriptionSuffix',
-      );
-    }
-
-    for (final propstat in response.propstats) {
-      final statusCode = propstat.statusCode;
-      if (statusCode == null || statusCode < 400) {
-        continue;
-      }
-      final statusText = propstat.rawStatus ?? 'HTTP status $statusCode';
+      final propstatFailure =
+          failedStatus(propstat.statusCode, propstat.rawStatus);
+      if (propstatFailure == null) continue;
       final props =
           propstat.properties.values.map(_formatPropertyName).toList();
-      final propsSuffix = props.isEmpty ? '' : '. Props: $props';
-      final description = response.responseDescription;
-      final descriptionSuffix = description == null ? '' : '. $description';
+      final propsSuffix =
+          props.isEmpty && !alwaysListProps ? '' : '. $propsLabel: $props';
       failures.add(
-        'Failed to process ${response.href}: '
-        '$statusText$propsSuffix$descriptionSuffix',
+        'Failed to $action ${response.href}: '
+        '$propstatFailure$propsSuffix$descriptionSuffix',
       );
     }
   }

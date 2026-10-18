@@ -156,6 +156,33 @@ void main() {
     );
   });
 
+  group('missing or invalid status counts as a failure', () {
+    test('in a propstat', () {
+      final failures = parsePropPatchFailureMessages(_multiStatus('''
+<d:response>
+  <d:href>/dav/f</d:href>
+  <d:propstat><d:prop><d:displayname/></d:prop></d:propstat>
+  <d:propstat>
+    <d:prop><d:getetag/></d:prop>
+    <d:status>bogus</d:status>
+  </d:propstat>
+</d:response>'''));
+      expect(failures, hasLength(2));
+      expect(failures[0], contains('missing status'));
+      expect(failures[1], contains('invalid status "bogus"'));
+    });
+
+    test('in a response without propstats', () {
+      final failures = parseMultiStatusFailureMessages(_multiStatus('''
+<d:response><d:href>/dav/a</d:href></d:response>
+<d:response>
+  <d:href>/dav/b</d:href>
+  <d:status>HTTP/1.1 204 No Content</d:status>
+</d:response>'''));
+      expect(failures.single, 'Failed to process /dav/a: missing status');
+    });
+  });
+
   test('PROPPATCH reports response-level failures', () {
     final failures = parsePropPatchFailureMessages(_multiStatus('''
 <d:response>
