@@ -1050,8 +1050,10 @@ class WebdavClient {
       headers: headers,
     );
 
-    final str = resp.data as String;
-    final file = WebdavFile.parseFiles(path, str, skipSelf: false).firstOrNull;
+    final file = _parsePropfind(
+      resp,
+      (body) => WebdavFile.parseFiles(path, body, skipSelf: false).firstOrNull,
+    );
     if (file == null) {
       throw WebdavException(
         message: 'Quota not found',

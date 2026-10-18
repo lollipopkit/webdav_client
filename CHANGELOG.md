@@ -27,6 +27,9 @@
 
 ### Fixed
 
+- `readDir`, `readProps`, `propFind` and `quotaBytes` report a PROPFIND
+  response with an empty or malformed body as `WebdavException` instead of
+  leaking an `XmlParserException` (or a cast error from `quotaBytes`).
 - `syncCollection` sends `Depth: 0` as RFC 6578 §3.3 requires, even when the
   caller passes a `Depth` header; the `depth` argument only sets
   `DAV:sync-level`.

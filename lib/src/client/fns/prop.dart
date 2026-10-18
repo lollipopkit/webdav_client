@@ -860,15 +860,7 @@ extension WebdavClientPropfind on WebdavClient {
       headers: headers,
     );
 
-    final str = resp.data;
-    if (str == null) {
-      throw WebdavException(
-        message: 'No data returned',
-        statusCode: resp.statusCode,
-      );
-    }
-
-    final rawMap = parseMultiStatusToMap(str);
+    final rawMap = _parsePropfind(resp, parseMultiStatusToMap);
     if (rawMap.isEmpty) {
       return const {};
     }
