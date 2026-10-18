@@ -737,7 +737,9 @@ extension WebdavClientPropfind on WebdavClient {
       cancelToken: cancelToken,
     );
 
-    // Keys are decoded server hrefs, which carry the base URL's path.
+    // Keys are server hrefs decoded once, which carry the base URL's path.
+    // `Uri.path` stays percent-encoded, so decoding it here is the single
+    // decode for the target too (see the `/a%2520b` test).
     final targetUri = Uri.parse(absoluteUrl(path));
     final target = _hrefPathKey(decodeHref(targetUri.path));
     final statusMap = raw.entries
