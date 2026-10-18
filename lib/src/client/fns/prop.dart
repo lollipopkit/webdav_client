@@ -224,49 +224,38 @@ extension WebdavClientPropfind on WebdavClient {
     xmlBuilder.element('d:propertyupdate', nest: () {
       xmlBuilder.namespaceUri('d', 'DAV:');
 
-      final setResolution = (setProps != null && setProps.isNotEmpty)
-          ? resolvePropertyNames(
-              setProps.keys,
-              namespaceMap: namespaces,
-            )
-          : null;
-      final removeResolution = (removeProps != null && removeProps.isNotEmpty)
-          ? resolvePropertyNames(
-              removeProps,
-              namespaceMap: namespaces,
-            )
-          : null;
+      final setEntries = setProps?.entries.toList() ?? const [];
+      final removeNames = removeProps ?? const <String>[];
+      // Resolve together so set and remove never share an auto prefix.
+      final resolution = resolvePropertyNames(
+        [...setEntries.map((e) => e.key), ...removeNames],
+        namespaceMap: namespaces,
+      );
+      final setResolved = resolution.properties.sublist(0, setEntries.length);
+      final removeResolved = resolution.properties.sublist(setEntries.length);
 
-      final namespaceDeclarations = <String, String>{};
-      if (setResolution != null) {
-        namespaceDeclarations.addAll(setResolution.namespaces);
-      }
-      if (removeResolution != null) {
-        namespaceDeclarations.addAll(removeResolution.namespaces);
-      }
-
-      namespaceDeclarations.forEach((prefix, uri) {
+      resolution.namespaces.forEach((prefix, uri) {
         if (prefix == 'd') return;
         xmlBuilder.namespaceUri(prefix, uri);
       });
 
-      if (setResolution != null) {
-        final entries = setProps!.entries.toList();
+      if (setResolved.isNotEmpty) {
         xmlBuilder.element('d:set', nest: () {
           xmlBuilder.element('d:prop', nest: () {
-            for (var i = 0; i < setResolution.properties.length; i++) {
-              final prop = setResolution.properties[i];
-              final value = entries[i].value;
-              xmlBuilder.element(prop.qualifiedName, nest: value);
+            for (var i = 0; i < setResolved.length; i++) {
+              xmlBuilder.element(
+                setResolved[i].qualifiedName,
+                nest: setEntries[i].value,
+              );
             }
           });
         });
       }
 
-      if (removeResolution != null) {
+      if (removeResolved.isNotEmpty) {
         xmlBuilder.element('d:remove', nest: () {
           xmlBuilder.element('d:prop', nest: () {
-            for (final prop in removeResolution.properties) {
+            for (final prop in removeResolved) {
               xmlBuilder.element(prop.qualifiedName);
             }
           });
@@ -748,14 +737,10 @@ extension WebdavClientPropfind on WebdavClient {
       cancelToken: cancelToken,
     );
 
-    final normalizedTarget = _normalizeHrefForPropFind(path);
-    var statusMap = raw[path];
-    statusMap ??= raw[normalizedTarget];
-    statusMap ??= raw[_normalizeHrefForPropFind(normalizedTarget)];
-    statusMap ??= raw.entries
-        .firstWhereOrNull(
-          (entry) => _normalizeHrefForPropFind(entry.key) == normalizedTarget,
-        )
+    // Keys are decoded server hrefs, which carry the base URL's path.
+    final target = _hrefPathKey(decodeHref(Uri.parse(absoluteUrl(path)).path));
+    var statusMap = raw.entries
+        .firstWhereOrNull((entry) => _hrefPathKey(entry.key) == target)
         ?.value;
 
     if (statusMap == null && raw.length == 1) {
@@ -930,26 +915,12 @@ List<String> _hrefList(XmlElement? element) {
       .toList(growable: false);
 }
 
-String _normalizeHrefForPropFind(String href) {
-  if (href.isEmpty) {
-    return href;
-  }
-  try {
-    final uri = Uri.parse(href);
-    final path =
-        uri.hasScheme || uri.hasAuthority || uri.hasQuery || uri.hasFragment
-            ? uri.path
-            : href;
-    return _decodePropFindHref(path);
-  } on FormatException {
-    return _decodePropFindHref(href);
-  }
-}
+final _schemeAuthorityReg = RegExp('^[A-Za-z][A-Za-z0-9+.-]*://[^/]*');
 
-String _decodePropFindHref(String href) {
-  try {
-    return Uri.decodeFull(href);
-  } on FormatException {
-    return href;
-  }
+/// Path of a decoded href without scheme, authority or trailing slash.
+String _hrefPathKey(String decodedHref) {
+  final path = decodedHref.replaceFirst(_schemeAuthorityReg, '');
+  return path.length > 1 && path.endsWith('/')
+      ? path.substring(0, path.length - 1)
+      : path;
 }

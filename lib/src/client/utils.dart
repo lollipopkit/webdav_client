@@ -60,10 +60,9 @@ List<MultiStatusResponse> parseMultiStatus(String xmlString) {
   final document = XmlDocument.parse(xmlString);
   final responses = <MultiStatusResponse>[];
 
-  for (final responseElement in findAllElements(document, 'response')) {
-    final href = getElementText(responseElement, 'href');
-    final decodedHref =
-        href != null && href.isNotEmpty ? _decodeHref(href) : '';
+  for (final responseElement in multiStatusResponses(document)) {
+    final href = hrefText(responseElement);
+    final decodedHref = href != null ? decodeHref(href) : '';
 
     final overallStatusElement = responseElement.childElements.firstWhereOrNull(
       (element) =>
@@ -97,9 +96,9 @@ List<MultiStatusResponse> parseMultiStatus(String xmlString) {
     if (locationElement != null) {
       final hrefElement = findElements(locationElement, 'href').firstOrNull;
       if (hrefElement != null) {
-        final hrefText = hrefElement.innerText;
+        final hrefText = hrefElement.innerText.trim();
         if (hrefText.isNotEmpty) {
-          locationHref = _decodeHref(hrefText);
+          locationHref = decodeHref(hrefText);
         }
       }
     }
@@ -186,19 +185,22 @@ Map<String, Map<int, Map<String, XmlElement>>> parseMultiStatusToMap(
   return result;
 }
 
-String _decodeHref(String value) {
-  try {
-    return Uri.decodeFull(value);
-  } on FormatException {
-    return value;
-  }
-}
-
 List<String> parsePropPatchFailureMessages(String xmlString) {
   final responses = parseMultiStatus(xmlString);
   final failures = <String>[];
 
   for (final response in responses) {
+    final responseStatus = response.statusCode;
+    if (responseStatus != null && responseStatus >= 400) {
+      final statusText = response.rawStatus ?? 'HTTP status $responseStatus';
+      final description = response.responseDescription;
+      final descriptionSuffix = description == null ? '' : '. $description';
+      failures.add(
+        'Failed to update properties for ${response.href}: '
+        '$statusText$descriptionSuffix',
+      );
+    }
+
     for (final propstat in response.propstats) {
       final status = propstat.statusCode;
       if (status != null && status >= 400) {
@@ -281,8 +283,9 @@ extension _Utils on WebdavClient {
           activeLock.findElements('locktoken', namespaceUri: '*');
       for (final lockToken in lockTokenElements) {
         final href = lockToken.findElements('href', namespaceUri: '*').firstOrNull;
-        if (href != null && href.innerText.isNotEmpty) {
-          return href.innerText;
+        final token = href?.innerText.trim();
+        if (token != null && token.isNotEmpty) {
+          return token;
         }
       }
     }
@@ -292,15 +295,16 @@ extension _Utils on WebdavClient {
         document.findAllElements('locktoken', namespaceUri: '*');
     for (final lockToken in lockTokenElements) {
       final href = lockToken.findElements('href', namespaceUri: '*').firstOrNull;
-      if (href != null && href.innerText.isNotEmpty) {
-        return href.innerText;
+      final token = href?.innerText.trim();
+      if (token != null && token.isNotEmpty) {
+        return token;
       }
     }
 
     // Try
     final hrefElements = document.findAllElements('href', namespaceUri: '*');
     for (final href in hrefElements) {
-      final text = href.innerText;
+      final text = href.innerText.trim();
       if (text.startsWith('urn:uuid:') || text.startsWith('opaquelocktoken:')) {
         return text;
       }

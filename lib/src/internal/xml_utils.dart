@@ -31,3 +31,20 @@ int? parseStatusLine(String statusText) {
   final match = _statusLineReg.firstMatch(statusText.trim());
   return match != null ? int.parse(match.group(1)!) : null;
 }
+
+/// The `DAV:response` children of a `DAV:multistatus` [document]
+/// (RFC 4918 §14.16). Nested elements, such as property values that happen to
+/// be named `response`, are not included.
+Iterable<XmlElement> multiStatusResponses(XmlDocument document) {
+  final root = document.rootElement;
+  if (root.localName != 'multistatus' || root.namespaceUri != 'DAV:') {
+    return const <XmlElement>[];
+  }
+  return root.findElements('response', namespaceUri: 'DAV:');
+}
+
+/// Trimmed text of the `DAV:href` child of [element], or `null`.
+String? hrefText(XmlElement element) {
+  final text = element.getElement('href', namespaceUri: 'DAV:')?.innerText.trim();
+  return text == null || text.isEmpty ? null : text;
+}

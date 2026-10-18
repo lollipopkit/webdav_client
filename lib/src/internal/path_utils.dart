@@ -258,3 +258,16 @@ bool _isHexDigit(int code) =>
     (code >= 0x30 && code <= 0x39) || // 0-9
     (code >= 0x41 && code <= 0x46) || // A-F
     (code >= 0x61 && code <= 0x66); // a-f
+
+/// Percent-decode an href, returning it unchanged when it is not valid
+/// percent-encoding (such as a bare `%` or escapes that are not UTF-8).
+String decodeHref(String href) {
+  for (var i = href.indexOf('%'); i != -1; i = href.indexOf('%', i + 1)) {
+    if (!_isEscapeAt(href, i)) return href;
+  }
+  try {
+    return Uri.decodeFull(href);
+  } on FormatException {
+    return href;
+  }
+}

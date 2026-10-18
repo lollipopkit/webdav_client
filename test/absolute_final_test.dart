@@ -195,7 +195,7 @@ void main() {
     test('element with namespace but no prefix shows as {uri}name', () {
       const xml = '''
 <?xml version="1.0" encoding="utf-8"?>
-<d:multistatus xmlns:custom="http://example.com/ns">
+<d:multistatus xmlns:d="DAV:" xmlns:custom="http://example.com/ns">
   <d:response>
     <d:href>/test</d:href>
     <d:propstat>
