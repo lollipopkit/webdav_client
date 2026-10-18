@@ -17,6 +17,16 @@ class _WdDio with DioMixin {
     this.options.validateStatus = (status) => true;
 
     httpClientAdapter = getAdapter();
+    // A composed content-type cannot be unset through Options, only on the
+    // final RequestOptions.
+    interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) {
+        if (options.extra.remove(_dropContentTypeKey) == true) {
+          options.contentType = null;
+        }
+        handler.next(options);
+      },
+    ));
   }
 
   /// Issue an HTTP request using WebDAV-aware defaults.
@@ -245,12 +255,12 @@ class _WdDio with DioMixin {
                   options.headers?.removeWhere(
                     (key, _) => _entityHeaders.contains(key.toLowerCase()),
                   );
-                  // Null overrides the client-wide headers dio merges in. dio
-                  // rejects that for content-type, which a bodyless GET may
-                  // carry harmlessly.
+                  // Null overrides the client-wide headers dio merges in;
+                  // content-type is dropped by the interceptor instead.
                   for (final key in _entityHeaders) {
                     if (key != 'content-type') options.headers?[key] = null;
                   }
+                  options.extra = {...?options.extra, _dropContentTypeKey: true};
                 }
               : optionsHandler,
           onSendProgress: onSendProgress,
@@ -1124,6 +1134,8 @@ const _parentMkcolFilteredHeaders = <String>{
   ..._putTargetConditionHeaders,
   ..._entityHeaders,
 };
+
+const _dropContentTypeKey = 'webdav_client_plus.dropContentType';
 
 const _sensitiveRedirectHeaders = <String>{
   'authorization',

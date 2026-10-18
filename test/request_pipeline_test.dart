@@ -120,10 +120,13 @@ void main() {
     });
 
     test('drops client-wide entity headers on the GET', () async {
-      final seen = <String, String?>{};
+      final seen = <String, String>{};
       final server = await _serve((request) async {
         await request.drain<void>();
-        seen[request.method] = request.headers.value('content-language');
+        seen[request.method] = [
+          request.headers.value('content-type'),
+          request.headers.value('content-language'),
+        ].join(' ');
         if (request.method == 'PUT') {
           request.response
             ..statusCode = HttpStatus.seeOther
@@ -133,9 +136,9 @@ void main() {
       });
 
       final client = WebdavClient.noAuth(url: _url(server))
-        ..setHeaders({'Content-Language': 'en'});
+        ..setHeaders({'Content-Type': 'text/plain', 'Content-Language': 'en'});
       await client.request<String>('PUT', target: '/f', data: 'x');
-      expect(seen, {'PUT': 'en', 'GET': null});
+      expect(seen, {'PUT': 'text/plain en', 'GET': 'null null'});
     });
 
     test('keeps HEAD as HEAD', () async {

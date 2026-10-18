@@ -52,8 +52,7 @@
   body of an unsuccessful response into the exception, releasing the
   connection.
 - A 303 turns the request into a GET without entity headers, including ones
-  set through `setHeaders` (except `Content-Type`, which dio cannot unset),
-  and keeps HEAD as HEAD. A `Location` that cannot be parsed is no longer followed in a loop,
+  set through `setHeaders`, and keeps HEAD as HEAD. A `Location` that cannot be parsed is no longer followed in a loop,
   and a redirect that is not followed keeps its body for the caller.
 - COPY/MOVE retries a 409 once after creating the parent instead of looping,
   and no longer sends the `If` header and conditions to the parent MKCOL.
