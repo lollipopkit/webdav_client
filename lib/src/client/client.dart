@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io' as io;
 import 'dart:io';
 import 'dart:typed_data';
@@ -9,6 +10,7 @@ import 'package:webdav_client_plus/src/adapter/adapter_stub.dart'
     if (dart.library.js) 'package:webdav_client_plus/src/adapter/adapter_web.dart';
 import 'package:webdav_client_plus/src/auth.dart';
 import 'package:webdav_client_plus/src/enums.dart';
+import 'package:webdav_client_plus/src/internal/auth_challenge.dart';
 import 'package:webdav_client_plus/src/internal/iterable_extensions.dart';
 import 'package:webdav_client_plus/src/internal/path_utils.dart';
 import 'package:webdav_client_plus/src/internal/property_resolution.dart';
