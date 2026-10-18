@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- `readDir` no longer returns the requested collection itself when the base
+  URL has a path (e.g. `/remote.php/dav/files/<user>`). Hrefs are now compared
+  against the resolved request URL, ignoring percent-encoding differences.
+
 ## [2.0.0]
 
 ### Breaking

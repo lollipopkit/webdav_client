@@ -70,7 +70,8 @@ class WebdavFile {
 
   /// Parse a WebDAV XML response to a list of WebdavFile objects
   ///
-  /// - [path] is the base path of the files
+  /// - [path] is the requested path or absolute URL, matched against hrefs
+  ///   when [skipSelf] is set
   /// - [xmlStr] is the XML response from the server
   /// - [skipSelf] is a flag to skip the first entry (self) in the response
   static List<WebdavFile> parseFiles(
@@ -373,5 +374,6 @@ String _normalizeHrefForComparison(
     value = value.substring(0, value.length - 1);
   }
 
-  return value;
+  // Servers may percent-encode differently than the client did.
+  return _decodeHrefValue(value);
 }

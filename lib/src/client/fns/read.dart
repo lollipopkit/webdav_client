@@ -40,7 +40,8 @@ extension WebdavClientRead on WebdavClient {
       );
     }
 
-    return WebdavFile.parseFiles(path, str);
+    // Hrefs include the base URL's path, so compare against the resolved URL.
+    return WebdavFile.parseFiles(absoluteUrl(path), str);
   }
 
   /// Read a single files properties

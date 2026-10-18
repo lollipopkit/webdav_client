@@ -112,6 +112,33 @@ void main() {
       expect(files.first.name, 'file.txt');
     });
 
+    test('skipSelf matches a base URL path encoded differently', () {
+      const xml = '''
+<?xml version="1.0" encoding="utf-8"?>
+<d:multistatus xmlns:d="DAV:">
+  <d:response>
+    <d:href>/remote.php/dav/a%28b%29/</d:href>
+    <d:propstat>
+      <d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>https://example.com/remote.php/dav/a%28b%29/file.txt</d:href>
+    <d:propstat>
+      <d:prop><d:resourcetype/></d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+</d:multistatus>
+''';
+      final files = WebdavFile.parseFiles(
+        'https://example.com/remote.php/dav/a(b)/',
+        xml,
+      );
+      expect(files.map((f) => f.name), ['file.txt']);
+    });
+
     test('skips response without href', () {
       const xml = '''
 <?xml version="1.0" encoding="utf-8"?>
