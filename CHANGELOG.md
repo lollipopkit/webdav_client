@@ -4,6 +4,12 @@
 
 ### Fixed
 
+- `syncCollection` sends `Depth: 0` as RFC 6578 §3.3 requires; the `depth`
+  argument only sets `DAV:sync-level`.
+- `basicSearch` wraps the query in the `DAV:searchrequest` root required by
+  RFC 5323 §2.3.
+- `refreshLock` accepts any absolute URI as a lock token, not only
+  `urn:uuid:` and `opaquelocktoken:` ones, and skips `Not` conditions.
 - `readDir` no longer returns the requested collection itself when the base
   URL has a path (e.g. `/remote.php/dav/files/<user>`). Hrefs are now compared
   against the resolved request URL, ignoring percent-encoding differences.

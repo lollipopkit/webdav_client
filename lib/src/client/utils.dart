@@ -335,15 +335,15 @@ extension _Utils on WebdavClient {
     return '<$trimmed>';
   }
 
+  /// First state token in the If header's lists (RFC 4918 §10.4.2). Any
+  /// absolute URI is a valid lock token; resource tags outside the lists and
+  /// `Not` conditions are skipped.
   String? _extractLockTokenFromIfHeader(String ifHeader) {
-    final regex = RegExp('<([^>]+)>');
-    final matches = regex.allMatches(ifHeader);
-    for (final match in matches) {
-      final token = match.group(1);
-      if (token != null &&
-          (token.startsWith('urn:uuid:') ||
-              token.startsWith('opaquelocktoken:'))) {
-        return token;
+    final lists = RegExp(r'\(([^)]*)\)').allMatches(ifHeader);
+    for (final list in lists) {
+      final conditions = RegExp(r'(Not\s+)?<([^>]+)>').allMatches(list[1]!);
+      for (final condition in conditions) {
+        if (condition[1] == null) return condition[2]!.trim();
       }
     }
     return null;
