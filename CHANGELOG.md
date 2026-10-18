@@ -2,8 +2,37 @@
 
 ## [Unreleased]
 
+### Security
+
+- Cross-origin redirects now drop `Authorization`, `Cookie` and
+  `Proxy-Authorization` set through `setHeaders`, not only per-request ones,
+  and keep dropping them on later same-origin hops.
+- `DigestAuth` no longer sends an `Authorization` header before the server's
+  first challenge; that header carried a response hash computed without a
+  nonce.
+
+### Breaking
+
+- `Auth.authorize` takes an optional `body` and `DigestAuth.authorize` returns
+  `String?` (`null` before a challenge is known).
+
 ### Fixed
 
+- Digest picks its challenge by auth-scheme, so a `WWW-Authenticate` field
+  listing several schemes works, and chooses the strongest supported
+  algorithm; a challenge with only unsupported algorithms fails instead of
+  silently using MD5. `qop=auth-int` hashes the actual request body.
+- `readFile` reports a 401 as `WebdavException` instead of `StateError`, no
+  longer limits the whole download to `receiveTimeout`, and removes the
+  partial file when writing it fails. `readFile` and `readStream` read the
+  body of an unsuccessful response into the exception, releasing the
+  connection.
+- A 303 turns the request into a GET without entity headers and keeps HEAD as
+  HEAD. A `Location` that cannot be parsed is no longer followed in a loop.
+- COPY/MOVE retries a 409 once after creating the parent instead of looping,
+  and no longer sends the `If` header and conditions to the parent MKCOL.
+- Download progress treats any `Content-Encoding` other than `identity` as
+  compressed.
 - `readDir` no longer returns the requested collection itself when the base
   URL has a path (e.g. `/remote.php/dav/files/<user>`). Hrefs are now compared
   against the resolved request URL, ignoring percent-encoding differences.
