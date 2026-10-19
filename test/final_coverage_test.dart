@@ -296,9 +296,9 @@ void main() {
               ContentType('application', 'xml', charset: 'utf-8')
           ..write('''
 <?xml version="1.0"?>
-<root>
-  <href>urn:uuid:some-random-uuid</href>
-</root>
+<d:root xmlns:d="DAV:">
+  <d:href>urn:uuid:some-random-uuid</d:href>
+</d:root>
 ''');
         await request.response.close();
       });
