@@ -33,8 +33,9 @@ extension WebdavClientRead on WebdavClient {
     );
 
     // Hrefs include the base URL's path, so compare against the resolved URL.
-    return _parsePropfind(
+    return _parseXmlBody(
       resp,
+      'PROPFIND',
       (body) => WebdavFile.parseFiles(absoluteUrl(path), body),
     );
   }
@@ -53,8 +54,6 @@ extension WebdavClientRead on WebdavClient {
     Map<String, String> namespaces = const <String, String>{},
     Map<String, dynamic>? headers,
   }) async {
-    // path = _fixSlashes(path);
-
     final xmlStr = findType.buildXmlStr(
       properties,
       namespaceMap: namespaces,
@@ -68,9 +67,13 @@ extension WebdavClientRead on WebdavClient {
       headers: headers,
     );
 
-    return _parsePropfind(
+    // Depth 0 may still list other resources; pick the one requested.
+    final target = Uri.parse(absoluteUrl(path));
+    return _parseXmlBody(
       resp,
-      (body) => WebdavFile.parseFiles(path, body, skipSelf: false).firstOrNull,
+      'PROPFIND',
+      (body) => WebdavFile.parseFiles(path, body, skipSelf: false)
+          .firstWhereOrNull((file) => _hrefIsTarget(file.path, target)),
     );
   }
 

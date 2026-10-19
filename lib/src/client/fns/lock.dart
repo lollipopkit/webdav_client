@@ -139,7 +139,7 @@ extension WebdavClientLock on WebdavClient {
 
     final data = resp.data;
     if (data is String && data.isNotEmpty) {
-      return _extractLockToken(data);
+      return _parseXmlBody(resp, 'LOCK', _extractLockToken);
     }
 
     throw WebdavException(

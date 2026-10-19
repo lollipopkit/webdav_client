@@ -34,11 +34,13 @@ int? parseStatusLine(String statusText) {
 
 /// The `DAV:response` children of a `DAV:multistatus` [document]
 /// (RFC 4918 §14.16). Nested elements, such as property values that happen to
-/// be named `response`, are not included.
+/// be named `response`, are not included. Any other root is malformed.
 Iterable<XmlElement> multiStatusResponses(XmlDocument document) {
   final root = document.rootElement;
   if (root.localName != 'multistatus' || root.namespaceUri != 'DAV:') {
-    return const <XmlElement>[];
+    throw XmlParserException(
+      'Expected a DAV:multistatus root, found ${root.name.qualified}',
+    );
   }
   return davChildren(root, 'response');
 }

@@ -16,17 +16,25 @@
 - `Auth.authorize` takes an optional `body` and `DigestAuth.authorize` returns
   `String?`: `null` before a challenge is known or when its algorithm is not
   supported, instead of an MD5 response.
-
-### Added
-
 - The library re-exports the dio and xml types used in its public API
   (`CancelToken`, `DioException`, `DioExceptionType`, `Options`,
   `ProgressCallback`, `Response`, `ResponseBody`, `ResponseType`, `XmlElement`
   and its find/string extensions), so callers no longer need direct `dio` /
-  `xml` dependencies.
+  `xml` dependencies. Code that also imports another library exporting one of
+  these names, such as `Response` from `package:http`, needs a prefix or
+  `hide` on one of the imports.
 
 ### Fixed
 
+- Headers a request must not carry (sensitive ones after a cross-origin
+  redirect, entity ones on a 303 GET) are removed from the final request
+  instead of being set to `null`, which the web adapter sent as the literal
+  value `null`.
+- `readFile` cleanup no longer raises unhandled async errors when closing or
+  deleting the partial file fails, and a failed close after the last chunk
+  also removes the file.
+- `lock()` reports a malformed response body as `WebdavException` instead of
+  leaking an `XmlParserException`.
 - `readDir`, `readProps`, `propFind` and `quotaBytes` report a PROPFIND
   response with an empty or malformed body as `WebdavException` instead of
   leaking an `XmlParserException` (or a cast error from `quotaBytes`).
@@ -55,7 +63,11 @@
   set through `setHeaders`, and keeps HEAD as HEAD. A `Location` that cannot be parsed is no longer followed in a loop,
   and a redirect that is not followed keeps its body for the caller.
 - COPY/MOVE retries a 409 once after creating the parent instead of looping,
-  and no longer sends the `If` header and conditions to the parent MKCOL.
+  and no longer sends the `If` header and conditions to the parent MKCOL. A
+  207 that names no member fails instead of passing as success, since
+  RFC 4918 §9.8.5 sends 207 only when errors stopped the operation.
+- `readProps` and `quotaBytes` use the response entry for the requested
+  resource instead of the first one when a Depth 0 reply lists others.
 - Download progress treats any `Content-Encoding` other than `identity` as
   compressed.
 - `readDir` no longer returns the requested collection itself when the base
@@ -70,7 +82,9 @@
   hrefs and lock tokens.
 - Multi-Status parsing only reads the `DAV:response` children of the root, so
   property values containing `response` elements no longer add phantom
-  entries. Response, propstat and status elements must be in `DAV:`.
+  entries. Response, propstat and status elements must be in `DAV:`, and a
+  207 whose root is not `DAV:multistatus` is reported as malformed instead of
+  as an empty success.
 - `WebdavFile` reads its fields from `DAV:` properties only; a same-named
   property in another namespace stays in `customProps`. `creationdate` also
   accepts HTTP dates and lowercase RFC 3339, rejects dates outside the

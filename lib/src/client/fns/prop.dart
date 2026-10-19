@@ -737,17 +737,9 @@ extension WebdavClientPropfind on WebdavClient {
       cancelToken: cancelToken,
     );
 
-    // Keys are server hrefs decoded once, which carry the base URL's path.
-    // `Uri.path` stays percent-encoded, so decoding it here is the single
-    // decode for the target too (see the `/a%2520b` test).
-    final targetUri = Uri.parse(absoluteUrl(path));
-    final target = _hrefPathKey(decodeHref(targetUri.path));
+    final target = Uri.parse(absoluteUrl(path));
     final statusMap = raw.entries
-        .firstWhereOrNull(
-          (entry) =>
-              _hrefOriginMatches(entry.key, targetUri) &&
-              _hrefPathKey(entry.key) == target,
-        )
+        .firstWhereOrNull((entry) => _hrefIsTarget(entry.key, target))
         ?.value;
     if (statusMap == null) {
       return const <String, XmlElement>{};
@@ -867,7 +859,7 @@ extension WebdavClientPropfind on WebdavClient {
       headers: headers,
     );
 
-    final rawMap = _parsePropfind(resp, parseMultiStatusToMap);
+    final rawMap = _parseXmlBody(resp, 'PROPFIND', parseMultiStatusToMap);
     if (rawMap.isEmpty) {
       return const {};
     }
@@ -912,20 +904,20 @@ List<String> _hrefList(XmlElement? element) {
 
 final _schemeAuthorityReg = RegExp('^[A-Za-z][A-Za-z0-9+.-]*://[^/]*');
 
+/// Whether a once-decoded response href names the resolved request [target],
+/// which may carry the base URL's path. `Uri.path` stays percent-encoded, so
+/// decoding it here is the single decode for the target too.
+bool _hrefIsTarget(String decodedHref, Uri target) =>
+    _hrefOriginMatches(decodedHref, target) &&
+    _hrefPathKey(decodedHref) == _hrefPathKey(decodeHref(target.path));
+
 /// Whether an absolute [decodedHref] names the same origin as [target]; a
 /// path-only href always does.
 bool _hrefOriginMatches(String decodedHref, Uri target) {
   final origin = _schemeAuthorityReg.firstMatch(decodedHref)?[0];
   if (origin == null) return true;
-  final Uri uri;
-  try {
-    uri = Uri.parse(origin);
-  } on FormatException {
-    return false;
-  }
-  return uri.scheme == target.scheme.toLowerCase() &&
-      uri.host == target.host.toLowerCase() &&
-      uri.port == target.port;
+  final uri = Uri.tryParse(origin);
+  return uri != null && _sameOrigin(uri, target);
 }
 
 /// Path of a decoded href without scheme, authority or trailing slash.

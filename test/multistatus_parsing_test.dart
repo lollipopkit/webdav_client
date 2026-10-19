@@ -289,6 +289,77 @@ void main() {
       );
     });
 
+    group('a 207 whose root is not DAV:multistatus', () {
+      setUp(() => reply = (_) => '<x:other xmlns:x="urn:x"/>');
+
+      test('fails COPY instead of reporting success', () async {
+        await expectLater(
+          client.copy('/a', '/b'),
+          throwsA(isA<WebdavException>().having(
+            (e) => e.message,
+            'message',
+            contains('Expected a DAV:multistatus root'),
+          )),
+        );
+      });
+
+      test('fails readDir instead of listing nothing', () async {
+        await expectLater(
+          client.readDir('/'),
+          throwsA(isA<WebdavException>()),
+        );
+      });
+    });
+
+    test('COPY fails on a Multi-Status naming no member', () async {
+      // RFC 4918 §9.8.5: a COPY 207 reports errors that stopped the copy.
+      reply = (_) => _multiStatus('');
+      await expectLater(
+        client.copy('/a', '/b'),
+        throwsA(isA<WebdavException>().having(
+          (e) => e.message,
+          'message',
+          contains('COPY reported Multi-Status without any member'),
+        )),
+      );
+    });
+
+    group('Depth 0 responses listing other resources', () {
+      setUp(() => reply = (_) => _multiStatus(
+            _response(
+              '/dav/other',
+              '<d:quota-used-bytes>1</d:quota-used-bytes>'
+                  '<d:quota-available-bytes>1</d:quota-available-bytes>',
+            ) +
+                _response(
+                  '/dav/',
+                  '<d:quota-used-bytes>5</d:quota-used-bytes>'
+                      '<d:quota-available-bytes>7</d:quota-available-bytes>',
+                ),
+          ));
+
+      test('readProps returns the requested resource', () async {
+        final file = await client.readProps('/');
+        expect(file?.path, '/dav/');
+      });
+
+      test('quotaBytes reads the requested resource', () async {
+        expect(await client.quotaBytes(), (5, 7));
+      });
+    });
+
+    test('lock reports a malformed body as WebdavException', () async {
+      reply = (_) => 'not-xml';
+      await expectLater(
+        client.lock('/f'),
+        throwsA(isA<WebdavException>().having(
+          (e) => e.message,
+          'message',
+          contains('Unable to parse LOCK response'),
+        )),
+      );
+    });
+
     test('lock trims a token read from the body', () async {
       reply = (_) => '''
 <?xml version="1.0" encoding="utf-8"?>
