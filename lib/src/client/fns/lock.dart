@@ -9,9 +9,9 @@ class ActiveLock {
   final String? owner;
   final String? timeout;
 
-  /// Raw `DAV:lockroot` href (RFC 4918 §14.12): the resource the lock was
-  /// taken on, which differs from the queried path for locks inherited
-  /// through a Depth infinity lock on a parent collection.
+  /// `DAV:lockroot` (RFC 4918 §14.12) in the form of [WebdavFile.path]: the
+  /// resource the lock was taken on, which differs from the queried path for
+  /// locks inherited through a Depth infinity lock on a parent collection.
   final String? lockRoot;
 
   const ActiveLock({
@@ -218,7 +218,10 @@ extension WebdavClientLock on WebdavClient {
 
     return discovery
         .findElements('activelock', namespaceUri: '*')
-        .map(_parseActiveLock)
+        .map((element) => _parseActiveLock(
+              element,
+              (href) => _hrefTarget(href, requestPath: path),
+            ))
         .toList(growable: false);
   }
 
@@ -268,7 +271,10 @@ extension WebdavClientLock on WebdavClient {
   }
 }
 
-ActiveLock _parseActiveLock(XmlElement element) {
+ActiveLock _parseActiveLock(
+  XmlElement element,
+  String Function(String href) toPath,
+) {
   String? firstChildName(String container) {
     final containerElement = element.findElements(container, namespaceUri: '*')
         .firstOrNull;
@@ -292,6 +298,10 @@ ActiveLock _parseActiveLock(XmlElement element) {
     return text == null || text.isEmpty ? null : text;
   }
 
+  final lockRootHref = switch (davChild(element, 'lockroot')) {
+    final root? => hrefText(root),
+    null => null,
+  };
   return ActiveLock(
     token: nestedText('locktoken', 'href'),
     scope: firstChildName('lockscope'),
@@ -299,9 +309,6 @@ ActiveLock _parseActiveLock(XmlElement element) {
     depth: directText('depth'),
     owner: directText('owner'),
     timeout: directText('timeout'),
-    lockRoot: switch (davChild(element, 'lockroot')) {
-      final root? => hrefText(root),
-      null => null,
-    },
+    lockRoot: lockRootHref == null ? null : toPath(lockRootHref),
   );
 }

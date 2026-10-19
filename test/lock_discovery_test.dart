@@ -55,6 +55,6 @@ void main() {
     expect(locks.single.depth, 'infinity');
     expect(locks.single.owner, 'mailto:alice@example.com');
     expect(locks.single.timeout, 'Second-3600');
-    expect(locks.single.lockRoot, '/dir%20a/');
+    expect(locks.single.lockRoot, '/dir a/');
   });
 }
