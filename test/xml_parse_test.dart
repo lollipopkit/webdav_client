@@ -1,9 +1,14 @@
+import 'dart:io';
+
 import 'package:test/test.dart';
+import 'package:webdav_client_plus/src/internal/path_utils.dart';
 import 'package:webdav_client_plus/webdav_client_plus.dart';
+
+String _toPath(String href) => decodeHref(href.trim());
 
 void main() {
   test('propfind', () {
-    final files = WebdavFile.parseFiles('/', _propFindRaw);
+    final files = WebdavFile.parseFiles(_propFindRaw, _toPath);
     expect(files.length, 1);
     final first = files[0];
     expect(first.path, '/test dir/README.md');
@@ -17,12 +22,12 @@ void main() {
   });
 
   test('propfind accepts other successful propstat codes', () {
-    final files = WebdavFile.parseFiles('/', _propFind204);
+    final files = WebdavFile.parseFiles(_propFind204, _toPath);
     expect(files.single.name, 'no-content.txt');
   });
 
   test('custom properties preserve nested and empty values', () {
-    final files = WebdavFile.parseFiles('/', _customPropFindRaw);
+    final files = WebdavFile.parseFiles(_customPropFindRaw, _toPath);
     final entry = files.single;
 
     final metaValue = entry.customProps['http://example.com/custom:meta'];
@@ -42,9 +47,21 @@ void main() {
     );
   });
 
-  test('parseFiles skips collection self entry regardless of response order',
-      () {
-    final files = WebdavFile.parseFiles('/collection/', _collectionOutOfOrder);
+  test('readDir skips collection self entry regardless of response order',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((request) async {
+      await request.drain();
+      request.response
+        ..statusCode = HttpStatus.multiStatus
+        ..headers.contentType = ContentType('application', 'xml')
+        ..write(_collectionOutOfOrder);
+      await request.response.close();
+    });
+    final client = WebdavClient.noAuth(url: 'http://127.0.0.1:${server.port}');
+
+    final files = await client.readDir('/collection/');
     expect(
       files.map((file) => file.path).toList(),
       equals(['/collection/item.txt']),

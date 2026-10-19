@@ -431,7 +431,7 @@ void main() {
     });
   });
 
-  group('_normalizeHrefForComparison edge cases', () {
+  group('readDir self entry edge cases', () {
     test('skipSelf filters non-collection file with trailing slash', () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       addTearDown(() async => server.close(force: true));
@@ -520,6 +520,7 @@ void main() {
 
       final client = WebdavClient.noAuth(
         url: 'http://${server.address.host}:${server.port}',
+        options: const WebdavOptions(pathMode: PathMode.legacy),
       );
 
       final files = await client.readDir('/dir/');

@@ -32,11 +32,10 @@ extension WebdavClientRead on WebdavClient {
       headers: headers,
     );
 
-    // Hrefs include the base URL's path, so compare against the resolved URL.
     return _parseXmlBody(
       resp,
       'PROPFIND',
-      (body) => WebdavFile.parseFiles(absoluteUrl(path), body),
+      (body) => _parseFiles(body, path, skipSelf: true),
     );
   }
 
@@ -68,12 +67,11 @@ extension WebdavClientRead on WebdavClient {
     );
 
     // Depth 0 may still list other resources; pick the one requested.
-    final target = Uri.parse(absoluteUrl(path));
     return _parseXmlBody(
       resp,
       'PROPFIND',
-      (body) => WebdavFile.parseFiles(path, body, skipSelf: false)
-          .firstWhereOrNull((file) => _hrefIsTarget(file.path, target)),
+      (body) => _parseFiles(body, path)
+          .firstWhereOrNull((file) => _isTarget(file.path, path)),
     );
   }
 

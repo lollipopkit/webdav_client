@@ -71,63 +71,39 @@ class WebdavFile {
 
   /// Parse a WebDAV XML response to a list of WebdavFile objects
   ///
-  /// - [path] is the requested path or absolute URL, matched against hrefs
-  ///   when [skipSelf] is set
   /// - [xmlStr] is the XML response from the server
-  /// - [skipSelf] is a flag to skip the first entry (self) in the response
+  /// - [toPath] converts each response href, as sent by the server, to
+  ///   [WebdavFile.path], or returns `null` to skip the entry
   static List<WebdavFile> parseFiles(
-    String path,
-    String xmlStr, {
-    bool skipSelf = true,
-  }) {
+    String xmlStr,
+    String? Function(String href) toPath,
+  ) {
     final files = <WebdavFile>[];
     final xmlDocument = XmlDocument.parse(xmlStr);
-    final responseElements = multiStatusResponses(xmlDocument);
-
-    final normalizedBaseHref = skipSelf
-        ? _normalizeHrefForComparison(
-            path,
-            treatAsCollection: path.trim().isEmpty || path.trim().endsWith('/'),
-          )
-        : null;
-
-    for (final response in responseElements) {
+    for (final response in multiStatusResponses(xmlDocument)) {
       final href = hrefText(response);
       if (href == null) continue;
 
-      // Find successful propstat element
       final propstat = _findSuccessfulPropstat(response);
       if (propstat == null) continue;
 
-      // Find and process prop element
       final prop = davChild(propstat, 'prop');
       if (prop == null) continue;
 
-      if (skipSelf && normalizedBaseHref != null) {
-        final normalizedHref = _normalizeHrefForComparison(
-          href,
-          treatAsCollection: normalizedBaseHref.endsWith('/'),
-        );
-        if (normalizedHref == normalizedBaseHref) {
-          continue;
-        }
-      }
-
-      // Create WebdavFile from prop data
-      final file = parse(path, href, prop);
-      files.add(file);
+      final path = toPath(href);
+      if (path == null) continue;
+      files.add(parse(path, href, prop));
     }
-
     return files;
   }
 
   /// Create a WebdavFile object from prop data
   ///
-  /// - [basePath] is the base path of the files
+  /// - [path] becomes [WebdavFile.path]
   /// - [href] is the href of the file as sent by the server (percent-encoded)
   /// - [prop] is the prop element of the file
   static WebdavFile parse(
-    String basePath,
+    String path,
     String href,
     XmlElement prop,
   ) {
@@ -144,14 +120,15 @@ class WebdavFile {
 
     final mTime = _parseHttpDate(_davText(prop, 'getlastmodified'));
 
-    // Path and name
-    final decodedHref = decodeHref(href.trim());
     var name = _davText(prop, 'displayname');
-
-    // If name is not found, extract from path
     if (name == null || name.isEmpty) {
-      final pathParts = decodedHref.split('/');
-      name = pathParts.lastWhere((part) => part.isNotEmpty, orElse: () => '/');
+      final segment = href
+          .trim()
+          .split(RegExp('[?#]'))
+          .first
+          .split('/')
+          .lastWhere((part) => part.isNotEmpty, orElse: () => '');
+      name = segment.isEmpty ? '/' : decodeHref(segment);
     }
 
     final quotaAvailableBytes = _davInt(prop, 'quota-available-bytes');
@@ -182,7 +159,7 @@ class WebdavFile {
     }
 
     return WebdavFile(
-      path: decodedHref,
+      path: path,
       isDir: isDir,
       name: name,
       mimeType: mimeType,
@@ -241,8 +218,17 @@ DateTime? _parseIsoDate(String? value) {
   // DateTime.parse rolls invalid fields over (Feb 30 becomes Mar 1).
   if (month < 1 || month > 12) return null;
   if (day < 1 || day > DateTime.utc(year, month + 1, 0).day) return null;
-  if (part(4) > 23 || part(5) > 59 || part(6) > 59) return null;
-  return DateTime.tryParse(value.toUpperCase())?.toLocal();
+  final second = part(6);
+  if (part(4) > 23 || part(5) > 59 || second > 60) return null;
+  final upper = value.toUpperCase();
+  if (second < 60) return DateTime.tryParse(upper)?.toLocal();
+
+  // RFC 3339 §5.7: a leap second can only end a UTC month, at 23:59:60Z.
+  // Seconds sit at a fixed offset in the matched format.
+  final before = DateTime.tryParse(upper.replaceRange(17, 19, '59'))?.toUtc();
+  if (before == null || before.hour != 23 || before.minute != 59) return null;
+  final after = before.add(const Duration(seconds: 1));
+  return after.day == 1 ? after.toLocal() : null;
 }
 
 /// RFC 3339 §5.6 `date-time`, with `T` and `Z` in either case.
@@ -336,58 +322,3 @@ const _monthNumbers = {
   'nov': 11,
   'dec': 12,
 };
-
-String _normalizeHrefForComparison(
-  String href, {
-  required bool treatAsCollection,
-}) {
-  var value = href.trim();
-  if (value.isEmpty) {
-    return treatAsCollection ? '/' : '/';
-  }
-
-  Uri? parsed;
-  try {
-    parsed = Uri.parse(value);
-  } catch (_) {
-    parsed = null;
-  }
-
-  if (parsed != null) {
-    if (parsed.hasScheme || value.startsWith('/')) {
-      value = parsed.path;
-    } else if (parsed.path.isNotEmpty) {
-      value = parsed.path;
-    }
-  }
-
-  final queryIndex = value.indexOf('?');
-  if (queryIndex != -1) {
-    value = value.substring(0, queryIndex);
-  }
-
-  final fragmentIndex = value.indexOf('#');
-  if (fragmentIndex != -1) {
-    value = value.substring(0, fragmentIndex);
-  }
-
-  if (!value.startsWith('/')) {
-    value = '/$value';
-  }
-
-  value = value.replaceAll(RegExp('/+'), '/');
-  if (value.isEmpty) {
-    value = '/';
-  }
-
-  if (treatAsCollection) {
-    if (!value.endsWith('/')) {
-      value = '$value/';
-    }
-  } else if (value.length > 1 && value.endsWith('/')) {
-    value = value.substring(0, value.length - 1);
-  }
-
-  // Servers may percent-encode differently than the client did.
-  return decodeHref(value);
-}

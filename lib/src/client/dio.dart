@@ -1,7 +1,5 @@
 part of 'client.dart';
 
-final _httpPrefixReg = RegExp('https?://', caseSensitive: false);
-
 /// Thin wrapper around `dio` that injects WebDAV-specific behaviour such as
 /// automatic auth retries, base URL resolution and RFC 4918 error translation.
 class _WdDio with DioMixin {
@@ -10,11 +8,16 @@ class _WdDio with DioMixin {
   /// Configure the underlying dio mixin with sensible defaults (no automatic
   /// redirects, passthrough status validation) while wiring the correct adapter
   /// for the current platform.
-  _WdDio({required this.client, BaseOptions? options}) {
-    this.options = options ?? BaseOptions();
-    this.options.followRedirects = false;
+  _WdDio({required this.client}) {
+    options = BaseOptions(
+      headers: Map<String, dynamic>.of(client.webdavOptions.headers),
+      connectTimeout: client.webdavOptions.connectTimeout,
+      sendTimeout: client.webdavOptions.sendTimeout,
+      receiveTimeout: client.webdavOptions.receiveTimeout,
+    );
+    options.followRedirects = false;
 
-    this.options.validateStatus = (status) => true;
+    options.validateStatus = (status) => true;
 
     httpClientAdapter = getAdapter();
     // dio merges client-wide headers after Options, so headers a request
@@ -87,10 +90,7 @@ class _WdDio with DioMixin {
       }
     }
 
-    final rawTarget = path.startsWith(_httpPrefixReg)
-        ? path
-        : resolveAgainstBaseUrl(client.url, path);
-    final uri = Uri.parse(rawTarget);
+    final uri = Uri.parse(client.absoluteUrl(path));
 
     // authorization
     final requestTarget = _requestTarget(uri);
@@ -269,7 +269,7 @@ class _WdDio with DioMixin {
           authRetryCount: authRetryCount,
           // Once a hop left the origin, later hops must not restore secrets.
           stripSensitiveRedirectHeaders:
-              stripSensitiveRedirectHeaders || !_sameOrigin(uri, redirectUri),
+              stripSensitiveRedirectHeaders || !sameOrigin(uri, redirectUri),
         );
       }
       // No Location to follow: hand the response back so callers of the raw
@@ -301,7 +301,7 @@ class _WdDio with DioMixin {
     if (!_isRedirectStatus(statusCode)) {
       return false;
     }
-    if (_sameOrigin(sourceUri, targetUri)) {
+    if (sameOrigin(sourceUri, targetUri)) {
       return true;
     }
     return client.auth is NoAuth && _isSafeRedirectMethod(method);
@@ -570,10 +570,7 @@ class _WdDio with DioMixin {
       method,
       oldPath,
       optionsHandler: (options) {
-        final destinationHeader = resolveAgainstBaseUrl(
-          client.url,
-          newPath,
-        );
+        final destinationHeader = client.absoluteUrl(newPath);
         options.headers ??= <String, dynamic>{};
         if (headers != null && headers.isNotEmpty) {
           options.headers?.addAll(headers);
@@ -1116,19 +1113,6 @@ const _sensitiveRedirectHeaders = <String>{
   'proxy-authorization',
 };
 
-/// Whether [a] and [b] share scheme, host and port (RFC 6454 §5), treating a
-/// missing scheme as http and a missing port as the scheme's default.
-bool _sameOrigin(Uri a, Uri b) {
-  String scheme(Uri uri) =>
-      uri.scheme.isEmpty ? 'http' : uri.scheme.toLowerCase();
-  int port(Uri uri) => uri.hasPort
-      ? uri.port
-      : switch (scheme(uri)) { 'https' => 443, 'http' => 80, _ => 0 };
-  return scheme(a) == scheme(b) &&
-      a.host.toLowerCase() == b.host.toLowerCase() &&
-      port(a) == port(b);
-}
-
 bool _isSuccessfulReadStatus(int? statusCode) =>
     statusCode == 200 || statusCode == 206;
 
@@ -1170,27 +1154,55 @@ extension on _WdDio {
   ///
   /// Mimics SabreDAV's behaviour by walking up the path, issuing MKCOL as
   /// needed until the target's parent exists, while ensuring we stay within the
-  /// original server authority.
+  /// base URL.
   Future<void>? _createParent(
     String path, {
     CancelToken? cancelToken,
     String? ifHeader,
     Map<String, dynamic>? headers,
   }) {
+    final parent = switch (client.webdavOptions.pathMode) {
+      PathMode.baseRelative => _parentInBase(path),
+      PathMode.legacy => _legacyParent(path),
+    };
+    if (parent == null) {
+      return null;
+    }
+    return client.mkdirAll(
+      parent,
+      cancelToken: cancelToken,
+      ifHeader: ifHeader,
+      headers: headers,
+    );
+  }
+
+  /// Parent collection of [path] below the base URL, or `null` when the
+  /// parent is the base itself or lies outside it.
+  String? _parentInBase(String path) {
+    final target = hrefToTarget(client.url, client.absoluteUrl(path));
+    if (!target.startsWith('/')) {
+      return null;
+    }
+    final trimmed = target.endsWith('/')
+        ? target.substring(0, target.length - 1)
+        : target;
+    final slashIndex = trimmed.lastIndexOf('/');
+    return slashIndex <= 0 ? null : trimmed.substring(0, slashIndex + 1);
+  }
+
+  // TODO: remove with the legacy path mode.
+  String? _legacyParent(String path) {
     final baseUri = Uri.parse(client.url);
 
     Uri? resolvedUri;
     try {
-      final resolvedTarget = path.startsWith(_httpPrefixReg)
-          ? path
-          : resolveAgainstBaseUrl(client.url, path);
-      resolvedUri = Uri.parse(resolvedTarget);
+      resolvedUri = Uri.parse(client.absoluteUrl(path));
     } catch (_) {
       resolvedUri = null;
     }
 
     if (resolvedUri != null && resolvedUri.hasAuthority) {
-      if (_hasAuthority(baseUri) && !_sameOrigin(baseUri, resolvedUri)) {
+      if (_hasAuthority(baseUri) && !sameOrigin(baseUri, resolvedUri)) {
         return null;
       }
       if (!_hasAuthority(baseUri)) {
@@ -1229,12 +1241,7 @@ extension on _WdDio {
     if (parentPath == '/' || parentPath.isEmpty) {
       return null;
     }
-    return client.mkdirAll(
-      parentPath,
-      cancelToken: cancelToken,
-      ifHeader: ifHeader,
-      headers: headers,
-    );
+    return parentPath;
   }
 
   /// Return the encoded path, preserving percent-encoded segment semantics.

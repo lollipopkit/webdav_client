@@ -1,5 +1,28 @@
+import 'dart:io';
+
 import 'package:test/test.dart';
-import 'package:webdav_client_plus/src/models/webdav_file.dart';
+import 'package:webdav_client_plus/src/internal/path_utils.dart';
+import 'package:webdav_client_plus/webdav_client_plus.dart';
+
+String _toPath(String href) => decodeHref(href.trim());
+
+Future<HttpServer> _serveMultiStatus(String body) async {
+  final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+  addTearDown(() => server.close(force: true));
+  server.listen((request) async {
+    await request.drain();
+    request.response
+      ..statusCode = HttpStatus.multiStatus
+      ..headers.contentType = ContentType(
+        'application',
+        'xml',
+        charset: 'utf-8',
+      )
+      ..write(body);
+    await request.response.close();
+  });
+  return server;
+}
 
 void main() {
   group('WebdavFile.parseFiles', () {
@@ -24,7 +47,7 @@ void main() {
   </d:response>
 </d:multistatus>
 ''';
-      final files = WebdavFile.parseFiles('/dir/', xml);
+      final files = WebdavFile.parseFiles(xml, _toPath);
       expect(files.length, 1);
       final f = files.first;
       expect(f.name, 'file.txt');
@@ -54,13 +77,13 @@ void main() {
   </d:response>
 </d:multistatus>
 ''';
-      final files = WebdavFile.parseFiles('/dir/', xml);
+      final files = WebdavFile.parseFiles(xml, _toPath);
       expect(files.length, 1);
       expect(files.first.isDir, isTrue);
       expect(files.first.size, isNull);
     });
 
-    test('skipSelf=false returns self entry', () {
+    test('returns the self entry', () {
       const xml = '''
 <?xml version="1.0" encoding="utf-8"?>
 <d:multistatus xmlns:d="DAV:">
@@ -76,67 +99,9 @@ void main() {
   </d:response>
 </d:multistatus>
 ''';
-      final files = WebdavFile.parseFiles('/dir/', xml, skipSelf: false);
+      final files = WebdavFile.parseFiles(xml, _toPath);
       expect(files.length, 1);
       expect(files.first.name, 'dir');
-    });
-
-    test('skipSelf=true filters collection self entry', () {
-      const xml = '''
-<?xml version="1.0" encoding="utf-8"?>
-<d:multistatus xmlns:d="DAV:">
-  <d:response>
-    <d:href>/dir/</d:href>
-    <d:propstat>
-      <d:prop>
-        <d:resourcetype><d:collection/></d:resourcetype>
-        <d:displayname>dir</d:displayname>
-      </d:prop>
-      <d:status>HTTP/1.1 200 OK</d:status>
-    </d:propstat>
-  </d:response>
-  <d:response>
-    <d:href>/dir/file.txt</d:href>
-    <d:propstat>
-      <d:prop>
-        <d:resourcetype/>
-        <d:displayname>file.txt</d:displayname>
-      </d:prop>
-      <d:status>HTTP/1.1 200 OK</d:status>
-    </d:propstat>
-  </d:response>
-</d:multistatus>
-''';
-      final files = WebdavFile.parseFiles('/dir/', xml, skipSelf: true);
-      expect(files.length, 1);
-      expect(files.first.name, 'file.txt');
-    });
-
-    test('skipSelf matches a base URL path encoded differently', () {
-      const xml = '''
-<?xml version="1.0" encoding="utf-8"?>
-<d:multistatus xmlns:d="DAV:">
-  <d:response>
-    <d:href>/remote.php/dav/a%28b%29/</d:href>
-    <d:propstat>
-      <d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop>
-      <d:status>HTTP/1.1 200 OK</d:status>
-    </d:propstat>
-  </d:response>
-  <d:response>
-    <d:href>https://example.com/remote.php/dav/a%28b%29/file.txt</d:href>
-    <d:propstat>
-      <d:prop><d:resourcetype/></d:prop>
-      <d:status>HTTP/1.1 200 OK</d:status>
-    </d:propstat>
-  </d:response>
-</d:multistatus>
-''';
-      final files = WebdavFile.parseFiles(
-        'https://example.com/remote.php/dav/a(b)/',
-        xml,
-      );
-      expect(files.map((f) => f.name), ['file.txt']);
     });
 
     test('skips response without href', () {
@@ -151,7 +116,7 @@ void main() {
   </d:response>
 </d:multistatus>
 ''';
-      final files = WebdavFile.parseFiles('/', xml, skipSelf: false);
+      final files = WebdavFile.parseFiles(xml, _toPath);
       expect(files, isEmpty);
     });
 
@@ -168,7 +133,7 @@ void main() {
   </d:response>
 </d:multistatus>
 ''';
-      final files = WebdavFile.parseFiles('/', xml, skipSelf: false);
+      final files = WebdavFile.parseFiles(xml, _toPath);
       expect(files, isEmpty);
     });
 
@@ -184,7 +149,7 @@ void main() {
   </d:response>
 </d:multistatus>
 ''';
-      final files = WebdavFile.parseFiles('/', xml, skipSelf: false);
+      final files = WebdavFile.parseFiles(xml, _toPath);
       expect(files, isEmpty);
     });
 
@@ -200,7 +165,7 @@ void main() {
   </d:response>
 </d:multistatus>
 ''';
-      final files = WebdavFile.parseFiles('/', xml, skipSelf: false);
+      final files = WebdavFile.parseFiles(xml, _toPath);
       expect(files, isEmpty);
     });
 
@@ -219,7 +184,7 @@ void main() {
   </d:response>
 </d:multistatus>
 ''';
-      final files = WebdavFile.parseFiles('/', xml, skipSelf: false);
+      final files = WebdavFile.parseFiles(xml, _toPath);
       expect(files.length, 1);
       expect(files.first.name, 'hidden.txt');
     });
@@ -240,7 +205,7 @@ void main() {
   </d:response>
 </d:multistatus>
 ''';
-      final files = WebdavFile.parseFiles('/', xml, skipSelf: false);
+      final files = WebdavFile.parseFiles(xml, _toPath);
       expect(files.length, 1);
       expect(files.first.name, 'empty-name.txt');
     });
@@ -262,7 +227,7 @@ void main() {
   </d:response>
 </d:multistatus>
 ''';
-      final files = WebdavFile.parseFiles('/', xml, skipSelf: false);
+      final files = WebdavFile.parseFiles(xml, _toPath);
       expect(files.length, 1);
       expect(files.first.quotaUsedBytes, 5000);
       expect(files.first.quotaAvailableBytes, 10000);
@@ -285,10 +250,16 @@ void main() {
   </d:response>
 </d:multistatus>
 ''';
-      final files = WebdavFile.parseFiles('/dir/', xml);
+      final files = WebdavFile.parseFiles(xml, _toPath);
       expect(files.length, 1);
-      expect(files.first.customProps, contains('http://owncloud.org/ns:permissions'));
-      expect(files.first.customProps['http://owncloud.org/ns:permissions'], 'RDNVCK');
+      expect(
+        files.first.customProps,
+        contains('http://owncloud.org/ns:permissions'),
+      );
+      expect(
+        files.first.customProps['http://owncloud.org/ns:permissions'],
+        'RDNVCK',
+      );
       expect(files.first.customProps['http://owncloud.org/ns:id'], 'abc123');
     });
 
@@ -308,15 +279,18 @@ void main() {
   </d:response>
 </d:multistatus>
 ''';
-      final files = WebdavFile.parseFiles('/dir/', xml);
+      final files = WebdavFile.parseFiles(xml, _toPath);
       expect(files.length, 1);
-      final val = files.first.customProps['http://nextcloud.org/ns:complex-prop'];
+      final val =
+          files.first.customProps['http://nextcloud.org/ns:complex-prop'];
       expect(val, isNotNull);
       expect(val, contains('inner'));
     });
 
-    test('parses RFC 4918 207 Multi-Status with non-standard propstat code', () {
-      const xml = '''
+    test(
+      'parses RFC 4918 207 Multi-Status with non-standard propstat code',
+      () {
+        const xml = '''
 <?xml version="1.0" encoding="utf-8"?>
 <d:multistatus xmlns:d="DAV:">
   <d:response>
@@ -331,11 +305,12 @@ void main() {
   </d:response>
 </d:multistatus>
 ''';
-      // 207 is in 200-300 range, should be parsed as successful
-      final files = WebdavFile.parseFiles('/dir/', xml);
-      expect(files.length, 1);
-      expect(files.first.name, 'ok-file.txt');
-    });
+        // 207 is in 200-300 range, should be parsed as successful
+        final files = WebdavFile.parseFiles(xml, _toPath);
+        expect(files.length, 1);
+        expect(files.first.name, 'ok-file.txt');
+      },
+    );
 
     test('parses URL-encoded href', () {
       const xml = '''
@@ -353,7 +328,7 @@ void main() {
   </d:response>
 </d:multistatus>
 ''';
-      final files = WebdavFile.parseFiles('/', xml, skipSelf: false);
+      final files = WebdavFile.parseFiles(xml, _toPath);
       expect(files.length, 1);
       expect(files.first.path, '/files/hello world.txt');
     });
@@ -389,7 +364,7 @@ void main() {
 </d:multistatus>
 ''';
 
-      final files = WebdavFile.parseFiles('/', xml, skipSelf: false);
+      final files = WebdavFile.parseFiles(xml, _toPath);
       expect(files.single.size, 123);
       expect(files.single.quotaUsedBytes, 10);
       expect(files.single.quotaAvailableBytes, 90);
@@ -427,8 +402,8 @@ void main() {
 </d:multistatus>
 ''';
 
-      final rfc850 = WebdavFile.parseFiles('/', rfc850Xml, skipSelf: false);
-      final asctime = WebdavFile.parseFiles('/', asctimeXml, skipSelf: false);
+      final rfc850 = WebdavFile.parseFiles(rfc850Xml, _toPath);
+      final asctime = WebdavFile.parseFiles(asctimeXml, _toPath);
 
       expect(rfc850.single.modified, isNotNull);
       expect(asctime.single.modified, isNotNull);
@@ -451,10 +426,75 @@ void main() {
   </d:response>
 </d:multistatus>
 ''';
-      final files = WebdavFile.parseFiles('/', xml, skipSelf: false);
+      final files = WebdavFile.parseFiles(xml, _toPath);
       expect(files.length, 1);
       expect(files.first.created, isNull);
       expect(files.first.modified, isNull);
+    });
+  });
+
+  group('readDir self entry', () {
+    test('excludes the requested collection', () async {
+      final server = await _serveMultiStatus('''
+<?xml version="1.0" encoding="utf-8"?>
+<d:multistatus xmlns:d="DAV:">
+  <d:response>
+    <d:href>/dir/</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:resourcetype><d:collection/></d:resourcetype>
+        <d:displayname>dir</d:displayname>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/dir/file.txt</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:resourcetype/>
+        <d:displayname>file.txt</d:displayname>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+</d:multistatus>
+''');
+      final client = WebdavClient.noAuth(
+        url: 'http://${server.address.host}:${server.port}',
+      );
+
+      final files = await client.readDir('/dir/');
+      expect(files.map((f) => f.path), ['/dir/file.txt']);
+    });
+
+    test('matches a base URL path encoded differently', () async {
+      final server = await _serveMultiStatus('''
+<?xml version="1.0" encoding="utf-8"?>
+<d:multistatus xmlns:d="DAV:">
+  <d:response>
+    <d:href>/remote.php/dav/a%28b%29/</d:href>
+    <d:propstat>
+      <d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/remote.php/dav/a%28b%29/file.txt</d:href>
+    <d:propstat>
+      <d:prop><d:resourcetype/></d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+</d:multistatus>
+''');
+      final client = WebdavClient.noAuth(
+        url:
+            'http://${server.address.host}:${server.port}/remote.php/dav/a(b)/',
+      );
+
+      final files = await client.readDir('/');
+      expect(files.map((f) => f.path), ['/file.txt']);
     });
   });
 }

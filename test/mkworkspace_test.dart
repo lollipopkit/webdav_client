@@ -24,6 +24,7 @@ void main() {
 
     final client = WebdavClient.noAuth(
       url: 'http://${server.address.host}:${server.port}',
+      options: const WebdavOptions(pathMode: PathMode.legacy),
     );
 
     final response = await client.mkworkspace(

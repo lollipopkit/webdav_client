@@ -6,8 +6,9 @@ import 'package:webdav_client_plus/webdav_client_plus.dart';
 
 void main() {
   Future<(String method, String body, String? overwrite)> capture(
-    Future<void> Function(WebdavClient client) action,
-  ) async {
+    Future<void> Function(WebdavClient client) action, {
+    WebdavOptions options = const WebdavOptions(),
+  }) async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() async => server.close(force: true));
 
@@ -28,6 +29,7 @@ void main() {
 
     final client = WebdavClient.noAuth(
       url: 'http://${server.address.host}:${server.port}',
+      options: options,
     );
     await action(client);
     return (method!, body!, overwrite);
@@ -36,7 +38,7 @@ void main() {
   test('bind builds RFC 5842 body', () async {
     final result = await capture((client) async {
       await client.bind('/collection/', segment: 'alias.txt', href: '/src.txt');
-    });
+    }, options: const WebdavOptions(pathMode: PathMode.legacy));
 
     expect(result.$1, 'BIND');
     expect(result.$2, contains('<d:bind'));
@@ -62,7 +64,7 @@ void main() {
         href: '/src.txt',
         overwrite: true,
       );
-    });
+    }, options: const WebdavOptions(pathMode: PathMode.legacy));
 
     expect(result.$1, 'REBIND');
     expect(result.$2, contains('<d:rebind'));

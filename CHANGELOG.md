@@ -23,17 +23,41 @@
   `xml` dependencies. Code that also imports another library exporting one of
   these names, such as `Response` from `package:http`, needs a prefix or
   `hide` on one of the imports.
+- Paths follow `PathMode.baseRelative` by default, the convention of rclone,
+  the npm `webdav` client and webdavclient3. A path is decoded text relative
+  to the base URL, with or without a leading `/`. `%`, `?` and `#` are part
+  of the name, and `..` above the base throws `ArgumentError`.
+  `WebdavFile.path`, `propFindRaw` / `propFindDepth` keys and discovery
+  helper results are base-relative paths, or absolute URLs for resources
+  outside the base. The `href` arguments of `bind`, `rebind`, `merge` and
+  `mkworkspace` take the same form. Set
+  `WebdavOptions(pathMode: PathMode.legacy)` to keep the previous behaviour
+  until the next major release.
+- `WebdavFile.parseFiles` takes the body and a function converting each href
+  to a path, and no longer skips the requested resource; `WebdavFile.parse`
+  takes the converted path before the raw href.
 - The license changes from BSD-3-Clause to Apache-2.0. `NOTICE` keeps the
   original BSD-3-Clause notice for the upstream `webdav_client` code.
 
 ### Added
 
-- `ActiveLock.lockRoot` exposes the `DAV:lockroot` href, so a lock inherited
-  from a parent collection can be told apart and unlocked or refreshed on its
-  root.
+- `WebdavOptions` configures `pathMode`, headers and timeouts when creating a
+  client; `WebdavClient.webdavOptions` reflects later `set*` calls.
+- `MultiStatusResponse.rawHref` keeps the href as sent by the server.
+- `ActiveLock.lockRoot` exposes the `DAV:lockroot` resource in the same form
+  as `WebdavFile.path`, so a lock inherited from a parent collection can be
+  told apart and unlocked or refreshed on its root.
 
 ### Fixed
 
+- `mkdirAll` no longer issues MKCOL for collections above the base URL when
+  it creates missing parents, and a `%XX` sequence in a listed name no longer
+  turns into a different name when `WebdavFile.path` is passed back.
+- `WebdavFile.created` accepts an RFC 3339 leap second (`23:59:60` UTC at the
+  end of a month) instead of dropping the value.
+- `lockDiscovery` and `supportedLocks` read lock fields only from the `DAV:`
+  namespace, so a same-named element from another namespace no longer fills
+  them.
 - Headers a request must not carry (sensitive ones after a cross-origin
   redirect, entity ones on a 303 GET) are removed from the final request
   instead of being set to `null`, which the web adapter sent as the literal

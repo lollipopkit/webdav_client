@@ -161,6 +161,7 @@ void main() {
     final client = WebdavClient.noAuth(
       url:
           'http://${server.address.host}:${server.port}/remote.php/dav/files/alice',
+      options: const WebdavOptions(pathMode: PathMode.legacy),
     );
 
     final response = await client.request<String>(
@@ -223,7 +224,10 @@ void main() {
 
     final baseUrl =
         'http://${server.address.host}:${server.port}/remote.php/dav/files/alice/subdir/';
-    final client = WebdavClient.noAuth(url: baseUrl);
+    final client = WebdavClient.noAuth(
+      url: baseUrl,
+      options: const WebdavOptions(pathMode: PathMode.legacy),
+    );
 
     final response = await client.request<String>(
       'GET',
@@ -681,6 +685,7 @@ void main() {
     final authority = 'http://${server.address.host}:${server.port}';
     final client = WebdavClient.noAuth(
       url: '$authority/remote.php/dav/files/alice',
+      options: const WebdavOptions(pathMode: PathMode.legacy),
     );
 
     const absolutePath = '/remote.php/dav/files/alice/target.txt';

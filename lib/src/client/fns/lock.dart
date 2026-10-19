@@ -9,9 +9,9 @@ class ActiveLock {
   final String? owner;
   final String? timeout;
 
-  /// Raw `DAV:lockroot` href (RFC 4918 §14.12): the resource the lock was
-  /// taken on, which differs from the queried path for locks inherited
-  /// through a Depth infinity lock on a parent collection.
+  /// `DAV:lockroot` (RFC 4918 §14.12) in the form of [WebdavFile.path]: the
+  /// resource the lock was taken on, which differs from the queried path for
+  /// locks inherited through a Depth infinity lock on a parent collection.
   final String? lockRoot;
 
   const ActiveLock({
@@ -173,23 +173,10 @@ extension WebdavClientLock on WebdavClient {
       return const <(String, String)>[];
     }
 
-    return supported
-        .findElements('lockentry', namespaceUri: '*')
+    return davChildren(supported, 'lockentry')
         .map((entry) {
-          final scope = entry
-              .findElements('lockscope', namespaceUri: '*')
-              .firstOrNull
-              ?.childElements
-              .firstOrNull
-              ?.name
-              .local;
-          final type = entry
-              .findElements('locktype', namespaceUri: '*')
-              .firstOrNull
-              ?.childElements
-              .firstOrNull
-              ?.name
-              .local;
+          final scope = _firstChildName(entry, 'lockscope');
+          final type = _firstChildName(entry, 'locktype');
           if (scope == null || type == null) {
             return null;
           }
@@ -216,10 +203,31 @@ extension WebdavClientLock on WebdavClient {
       return const <ActiveLock>[];
     }
 
-    return discovery
-        .findElements('activelock', namespaceUri: '*')
-        .map(_parseActiveLock)
+    return davChildren(discovery, 'activelock')
+        .map((element) => _parseActiveLock(
+              element,
+              (href) => switch (_options.pathMode) {
+                PathMode.baseRelative => _propertyHrefTarget(href, path),
+                PathMode.legacy => _legacyLockRoot(href, path),
+              },
+            ))
         .toList(growable: false);
+  }
+
+  /// Decoded lockroot [href] in the form of legacy [WebdavFile.path], with a
+  /// relative reference first resolved against the request URL for [path].
+  // TODO: remove with the legacy path mode.
+  String _legacyLockRoot(String href, String path) {
+    final trimmed = href.trim();
+    if (trimmed.startsWith('/') ||
+        Uri.tryParse(trimmed)?.hasScheme != false) {
+      return decodeHref(trimmed);
+    }
+    try {
+      return decodeHref(Uri.parse(absoluteUrl(path)).resolve(trimmed).path);
+    } on FormatException catch (e) {
+      throw WebdavException(message: 'Malformed href in response: $e');
+    }
   }
 
   /// Refresh an existing lock using its lock token.
@@ -268,40 +276,34 @@ extension WebdavClientLock on WebdavClient {
   }
 }
 
-ActiveLock _parseActiveLock(XmlElement element) {
-  String? firstChildName(String container) {
-    final containerElement = element.findElements(container, namespaceUri: '*')
-        .firstOrNull;
-    return containerElement?.childElements.firstOrNull?.name.local;
-  }
-
-  String? nestedText(String container, String child) {
-    final containerElement = element.findElements(container, namespaceUri: '*')
-        .firstOrNull;
-    final childElement = containerElement?.findElements(child, namespaceUri: '*')
-        .firstOrNull;
-    final text = childElement?.innerText.trim();
+ActiveLock _parseActiveLock(
+  XmlElement element,
+  String Function(String href) toPath,
+) {
+  String? text(XmlElement? child) {
+    final text = child?.innerText.trim();
     return text == null || text.isEmpty ? null : text;
   }
 
-  String? directText(String name) {
-    final text = element.findElements(name, namespaceUri: '*')
-        .firstOrNull
-        ?.innerText
-        .trim();
-    return text == null || text.isEmpty ? null : text;
-  }
-
+  final lockRootHref = switch (davChild(element, 'lockroot')) {
+    final root? => hrefText(root),
+    null => null,
+  };
   return ActiveLock(
-    token: nestedText('locktoken', 'href'),
-    scope: firstChildName('lockscope'),
-    type: firstChildName('locktype'),
-    depth: directText('depth'),
-    owner: directText('owner'),
-    timeout: directText('timeout'),
-    lockRoot: switch (davChild(element, 'lockroot')) {
-      final root? => hrefText(root),
+    token: switch (davChild(element, 'locktoken')) {
+      final locktoken? => hrefText(locktoken),
       null => null,
     },
+    scope: _firstChildName(element, 'lockscope'),
+    type: _firstChildName(element, 'locktype'),
+    depth: text(davChild(element, 'depth')),
+    owner: text(davChild(element, 'owner')),
+    timeout: text(davChild(element, 'timeout')),
+    lockRoot: lockRootHref == null ? null : toPath(lockRootHref),
   );
 }
+
+/// Local name of the first element inside the `DAV:` child [container] of
+/// [element], such as `exclusive` in `DAV:lockscope`.
+String? _firstChildName(XmlElement element, String container) =>
+    davChild(element, container)?.childElements.firstOrNull?.name.local;

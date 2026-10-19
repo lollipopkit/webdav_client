@@ -5,6 +5,9 @@ class MultiStatusResponse {
   /// The decoded href of the resource the response applies to.
   final String href;
 
+  /// The href exactly as the server sent it, still percent-encoded.
+  final String rawHref;
+
   /// Top-level HTTP status code (outside of propstat blocks), if present.
   final int? statusCode;
 
@@ -25,6 +28,7 @@ class MultiStatusResponse {
 
   const MultiStatusResponse({
     required this.href,
+    this.rawHref = '',
     required this.propstats,
     this.statusCode,
     this.rawStatus,
@@ -124,6 +128,7 @@ List<MultiStatusResponse> parseMultiStatus(String xmlString) {
     responses.add(
       MultiStatusResponse(
         href: decodedHref,
+        rawHref: href ?? '',
         propstats: propstats,
         statusCode: overallStatusCode,
         rawStatus: overallStatusText,
@@ -137,16 +142,17 @@ List<MultiStatusResponse> parseMultiStatus(String xmlString) {
   return responses;
 }
 
-/// Parse a Multi-Status response into a map keyed by decoded href, mirroring
-/// SabreDAV's `Client::parseMultiStatus`.
+/// Parse a Multi-Status response into a map keyed by [keyOf], the decoded
+/// href by default, mirroring SabreDAV's `Client::parseMultiStatus`.
 Map<String, Map<int, Map<String, XmlElement>>> parseMultiStatusToMap(
-  String xmlString,
-) {
+  String xmlString, {
+  String Function(MultiStatusResponse response)? keyOf,
+}) {
   final responses = parseMultiStatus(xmlString);
   final result = <String, Map<int, Map<String, XmlElement>>>{};
 
   for (final response in responses) {
-    final hrefKey = response.href;
+    final hrefKey = keyOf?.call(response) ?? response.href;
     final statusMap =
         result.putIfAbsent(hrefKey, () => <int, Map<String, XmlElement>>{});
 
@@ -197,6 +203,9 @@ T _parseXmlBody<T>(
     return parse(body);
   } on XmlException catch (e) {
     throw error('Unable to parse $request response: $e');
+  } on FormatException catch (e) {
+    // Such as an href that is not a valid URI reference.
+    throw error('Malformed $request response: $e');
   }
 }
 
@@ -376,7 +385,7 @@ extension _Utils on WebdavClient {
       return '';
     }
 
-    final resourceTag = resolveAgainstBaseUrl(url, path);
+    final resourceTag = absoluteUrl(path);
 
     final conditionElements = <String>[];
     if (lockToken != null) {
@@ -427,6 +436,9 @@ extension _Utils on WebdavClient {
   }
 
   String _fixCollectionPath(String path) {
+    if (_options.pathMode == PathMode.baseRelative) {
+      return path.endsWith('/') ? path : '$path/';
+    }
     if (!path.startsWith('/')) {
       path = '/$path';
     }

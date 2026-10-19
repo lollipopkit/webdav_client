@@ -16,6 +16,7 @@ import 'package:webdav_client_plus/src/internal/path_utils.dart';
 import 'package:webdav_client_plus/src/internal/property_resolution.dart';
 import 'package:webdav_client_plus/src/internal/xml_utils.dart';
 import 'package:webdav_client_plus/src/models/webdav_file.dart';
+import 'package:webdav_client_plus/src/options.dart';
 import 'package:xml/xml.dart';
 
 part 'dio.dart';
@@ -52,47 +53,69 @@ class WebdavClient {
   /// Auth Mode (noAuth/basic/digest/bearer)
   Auth auth;
 
+  WebdavOptions _options;
+
+  /// Current options; the `set*` methods update them.
+  WebdavOptions get webdavOptions => _options;
+
   /// Create a client with username and password
   WebdavClient({
     required this.url,
     this.auth = const NoAuth(),
-  });
+    WebdavOptions options = const WebdavOptions(),
+  }) : _options = options;
 
   /// Create a client with basic auth
   WebdavClient.basicAuth({
     required this.url,
     required String user,
     required String pwd,
-  }) : auth = BasicAuth(user: user, pwd: pwd);
+    WebdavOptions options = const WebdavOptions(),
+  })  : auth = BasicAuth(user: user, pwd: pwd),
+        _options = options;
 
   /// Create a client with bearer token
   WebdavClient.bearerToken({
     required this.url,
     required String token,
-  }) : auth = BearerAuth(token: token);
+    WebdavOptions options = const WebdavOptions(),
+  })  : auth = BearerAuth(token: token),
+        _options = options;
 
   /// Create a client with no authentication
   WebdavClient.noAuth({
     required this.url,
-  }) : auth = const NoAuth();
+    WebdavOptions options = const WebdavOptions(),
+  })  : auth = const NoAuth(),
+        _options = options;
 
   // methods--------------------------------
 
   /// Set the public request headers
-  void setHeaders(Map<String, dynamic> headers) =>
-      _client.options.headers = headers;
+  void setHeaders(Map<String, dynamic> headers) {
+    _options = _options.copyWith(headers: headers);
+    _client.options.headers = headers;
+  }
 
   /// Set the connection server timeout time in milliseconds.
-  void setConnectTimeout(int timeout) =>
-      _client.options.connectTimeout = Duration(milliseconds: timeout);
+  void setConnectTimeout(int timeout) {
+    _options =
+        _options.copyWith(connectTimeout: Duration(milliseconds: timeout));
+    _client.options.connectTimeout = _options.connectTimeout;
+  }
 
   /// Set send data timeout time in milliseconds.
-  void setSendTimeout(int timeout) =>
-      _client.options.sendTimeout = Duration(milliseconds: timeout);
+  void setSendTimeout(int timeout) {
+    _options = _options.copyWith(sendTimeout: Duration(milliseconds: timeout));
+    _client.options.sendTimeout = _options.sendTimeout;
+  }
 
   /// Set transfer data time in milliseconds.
-  void setReceiveTimeout(int timeout) =>
-      _client.options.receiveTimeout = Duration(milliseconds: timeout);
+  void setReceiveTimeout(int timeout) {
+    _options =
+        _options.copyWith(receiveTimeout: Duration(milliseconds: timeout));
+    _client.options.receiveTimeout = _options.receiveTimeout;
+  }
 
   /// Test whether the service can connect
   Future<void> ping([
@@ -126,11 +149,98 @@ class WebdavClient {
     );
   }
 
-  /// Resolve a relative WebDAV target against this client's base URL.
-  ///
-  /// Mirrors SabreDAV's `Client::getAbsoluteUrl` helper and uses the same
-  /// collection-prefix preserving resolver as the request pipeline.
-  String absoluteUrl(String target) => resolveAgainstBaseUrl(url, target);
+  /// Resolve a path or URL [target] to the request URL, following
+  /// [WebdavOptions.pathMode].
+  String absoluteUrl(String target) =>
+      resolveTarget(url, target, _options.pathMode);
+
+  /// Convert a response [href] to the form path arguments take. Relative
+  /// hrefs resolve against the URL of the request for [requestPath].
+  /// [PathMode.legacy] keeps the href as sent.
+  String _hrefTarget(String href, {String? requestPath}) =>
+      switch (_options.pathMode) {
+        PathMode.baseRelative => hrefToTarget(
+            url,
+            href,
+            requestUrl: requestPath == null ? null : absoluteUrl(requestPath),
+          ),
+        PathMode.legacy => href,
+      };
+
+  /// Whether [reported], a path from a response, names the resource
+  /// [path] requests.
+  bool _isTarget(String reported, String path) {
+    if (_options.pathMode == PathMode.legacy) {
+      return _hrefIsTarget(reported, Uri.parse(absoluteUrl(path)));
+    }
+    String key(String target) => target.length > 1 && target.endsWith('/')
+        ? target.substring(0, target.length - 1)
+        : target;
+    return key(reported) == key(_hrefTarget(absoluteUrl(path)));
+  }
+
+  /// Files in a PROPFIND [body] answering the request for [requestPath],
+  /// without the requested resource itself when [skipSelf] is set.
+  List<WebdavFile> _parseFiles(
+    String body,
+    String requestPath, {
+    bool skipSelf = false,
+  }) {
+    if (_options.pathMode == PathMode.legacy) {
+      // TODO: remove with the legacy path mode.
+      final requestUrl = absoluteUrl(requestPath);
+      final selfKey = legacyHrefKey(
+        requestUrl,
+        treatAsCollection: requestPath.trim().isEmpty ||
+            requestPath.trim().endsWith('/'),
+      );
+      return WebdavFile.parseFiles(body, (href) {
+        final isSelf = legacyHrefKey(
+              href,
+              treatAsCollection: selfKey.endsWith('/'),
+            ) ==
+            selfKey;
+        return skipSelf && isSelf ? null : decodeHref(href.trim());
+      });
+    }
+    return WebdavFile.parseFiles(body, (href) {
+      final path = _hrefTarget(href, requestPath: requestPath);
+      return skipSelf && _isTarget(path, requestPath) ? null : path;
+    });
+  }
+
+  /// [_hrefTarget] for an href read from a property after the response body
+  /// was parsed, reporting a malformed href as a [WebdavException].
+  String _propertyHrefTarget(String href, String requestPath) {
+    try {
+      return _hrefTarget(href, requestPath: requestPath);
+    } on FormatException catch (e) {
+      throw WebdavException(message: 'Malformed href in response: $e');
+    }
+  }
+
+  /// `DAV:href` values below [element] from the response for [requestPath],
+  /// converted by [_hrefTarget].
+  List<String> _hrefs(String requestPath, XmlElement? element) {
+    if (element == null) {
+      return const <String>[];
+    }
+    return element
+        .findAllElements('href', namespaceUri: 'DAV:')
+        .map((href) => href.innerText.trim())
+        .where((href) => href.isNotEmpty)
+        .map((href) => _propertyHrefTarget(href, requestPath))
+        .toList(growable: false);
+  }
+
+  String? _firstHref(String requestPath, XmlElement? element) =>
+      _hrefs(requestPath, element).firstOrNull;
+
+  /// The href to embed in a request body for the path or URL [target].
+  String _bodyHref(String target) => switch (_options.pathMode) {
+        PathMode.baseRelative => absoluteUrl(target),
+        PathMode.legacy => target,
+      };
 
   /// Discover DAV capabilities advertised by the server via the `DAV` header.
   ///
@@ -234,7 +344,7 @@ class WebdavClient {
     xmlBuilder.element('d:bind', nest: () {
       xmlBuilder.namespaceUri('d', 'DAV:');
       xmlBuilder.element('d:segment', nest: segment);
-      xmlBuilder.element('d:href', nest: href);
+      xmlBuilder.element('d:href', nest: _bodyHref(href));
     });
     return _xmlExtensionRequest(
       'BIND',
@@ -281,7 +391,7 @@ class WebdavClient {
     xmlBuilder.element('d:rebind', nest: () {
       xmlBuilder.namespaceUri('d', 'DAV:');
       xmlBuilder.element('d:segment', nest: segment);
-      xmlBuilder.element('d:href', nest: href);
+      xmlBuilder.element('d:href', nest: _bodyHref(href));
     });
     final requestHeaders = <String, dynamic>{
       'Overwrite': overwrite ? 'T' : 'F',
@@ -674,7 +784,7 @@ class WebdavClient {
     xmlBuilder.element('d:mkworkspace', nest: () {
       xmlBuilder.namespaceUri('d', 'DAV:');
       xmlBuilder.element('d:source', nest: () {
-        xmlBuilder.element('d:href', nest: sourceHref);
+        xmlBuilder.element('d:href', nest: _bodyHref(sourceHref));
       });
     });
     return _xmlExtensionRequest(
@@ -700,7 +810,7 @@ class WebdavClient {
     xmlBuilder.element('d:merge', nest: () {
       xmlBuilder.namespaceUri('d', 'DAV:');
       xmlBuilder.element('d:source', nest: () {
-        xmlBuilder.element('d:href', nest: sourceHref);
+        xmlBuilder.element('d:href', nest: _bodyHref(sourceHref));
       });
       if (noAutoMerge) {
         xmlBuilder.element('d:no-auto-merge');

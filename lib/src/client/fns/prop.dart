@@ -346,7 +346,7 @@ extension WebdavClientPropfind on WebdavClient {
       cancelToken: cancelToken,
     );
     final principal = props['{DAV:}current-user-principal'];
-    return _firstHrefText(principal);
+    return _firstHref(path, principal);
   }
 
   /// Discover principal collection set hrefs (RFC 3744 §5.8).
@@ -361,7 +361,7 @@ extension WebdavClientPropfind on WebdavClient {
       headers: headers,
       cancelToken: cancelToken,
     );
-    return _hrefList(props['{DAV:}principal-collection-set']);
+    return _hrefs(path, props['{DAV:}principal-collection-set']);
   }
 
   /// Discover the owner principal URL for a resource (RFC 3744 §5.1).
@@ -376,7 +376,7 @@ extension WebdavClientPropfind on WebdavClient {
       headers: headers,
       cancelToken: cancelToken,
     );
-    return _firstHrefText(props['{DAV:}owner']);
+    return _firstHref(path, props['{DAV:}owner']);
   }
 
   /// Discover group membership hrefs for a principal (RFC 3744 §5.4).
@@ -392,7 +392,7 @@ extension WebdavClientPropfind on WebdavClient {
       cancelToken: cancelToken,
     );
     final element = props['{DAV:}group-membership'];
-    return _hrefList(element);
+    return _hrefs(path, element);
   }
 
   /// Discover ACL restrictions for [path] (RFC 3744 §5.5.1).
@@ -422,7 +422,7 @@ extension WebdavClientPropfind on WebdavClient {
       headers: headers,
       cancelToken: cancelToken,
     );
-    return _hrefList(props['{DAV:}group-member-set']);
+    return _hrefs(path, props['{DAV:}group-member-set']);
   }
 
   /// Discover current-user-privilege-set values for [path] (RFC 3744 §5.5).
@@ -480,7 +480,7 @@ extension WebdavClientPropfind on WebdavClient {
       headers: headers,
       cancelToken: cancelToken,
     );
-    return _hrefList(props['{DAV:}inherited-acl-set']);
+    return _hrefs(path, props['{DAV:}inherited-acl-set']);
   }
 
   /// Discover alternate URI set values for a principal (RFC 3744 §4.2).
@@ -495,7 +495,7 @@ extension WebdavClientPropfind on WebdavClient {
       headers: headers,
       cancelToken: cancelToken,
     );
-    return _hrefList(props['{DAV:}alternate-URI-set']);
+    return _hrefs(path, props['{DAV:}alternate-URI-set']);
   }
 
   /// Discover principal URL values for a principal resource (RFC 3744 §4.3).
@@ -510,7 +510,7 @@ extension WebdavClientPropfind on WebdavClient {
       headers: headers,
       cancelToken: cancelToken,
     );
-    return _hrefList(props['{DAV:}principal-URL']);
+    return _hrefs(path, props['{DAV:}principal-URL']);
   }
 
   /// Discover the workspace collection set hrefs (RFC 3253 §6.2).
@@ -525,7 +525,7 @@ extension WebdavClientPropfind on WebdavClient {
       headers: headers,
       cancelToken: cancelToken,
     );
-    return _hrefList(props['{DAV:}workspace-collection-set']);
+    return _hrefs(path, props['{DAV:}workspace-collection-set']);
   }
 
   /// Discover the activity collection set hrefs (RFC 3253 §13.5).
@@ -540,7 +540,7 @@ extension WebdavClientPropfind on WebdavClient {
       headers: headers,
       cancelToken: cancelToken,
     );
-    return _hrefList(props['{DAV:}activity-collection-set']);
+    return _hrefs(path, props['{DAV:}activity-collection-set']);
   }
 
   /// Discover creation user display name (RFC 3253 §3.1.1).
@@ -587,7 +587,7 @@ extension WebdavClientPropfind on WebdavClient {
       headers: headers,
       cancelToken: cancelToken,
     );
-    return _hrefList(props['{DAV:}source']);
+    return _hrefs(path, props['{DAV:}source']);
   }
 
   /// Discover the checked-in version href for a version-controlled resource.
@@ -602,7 +602,7 @@ extension WebdavClientPropfind on WebdavClient {
       headers: headers,
       cancelToken: cancelToken,
     );
-    return _firstHrefText(props['{DAV:}checked-in']);
+    return _firstHref(path, props['{DAV:}checked-in']);
   }
 
   /// Discover the checked-out version href for a version-controlled resource.
@@ -617,7 +617,7 @@ extension WebdavClientPropfind on WebdavClient {
       headers: headers,
       cancelToken: cancelToken,
     );
-    return _firstHrefText(props['{DAV:}checked-out']);
+    return _firstHref(path, props['{DAV:}checked-out']);
   }
 
   /// Discover the version-history href for a version-controlled resource.
@@ -632,7 +632,7 @@ extension WebdavClientPropfind on WebdavClient {
       headers: headers,
       cancelToken: cancelToken,
     );
-    return _firstHrefText(props['{DAV:}version-history']);
+    return _firstHref(path, props['{DAV:}version-history']);
   }
 
   /// Discover predecessor version hrefs for a version resource.
@@ -647,7 +647,7 @@ extension WebdavClientPropfind on WebdavClient {
       headers: headers,
       cancelToken: cancelToken,
     );
-    return _hrefList(props['{DAV:}predecessor-set']);
+    return _hrefs(path, props['{DAV:}predecessor-set']);
   }
 
   /// Discover successor version hrefs for a version resource.
@@ -662,7 +662,7 @@ extension WebdavClientPropfind on WebdavClient {
       headers: headers,
       cancelToken: cancelToken,
     );
-    return _hrefList(props['{DAV:}successor-set']);
+    return _hrefs(path, props['{DAV:}successor-set']);
   }
 
   /// Discover supported method names for [path] (RFC 3253 §3.1.3).
@@ -737,9 +737,8 @@ extension WebdavClientPropfind on WebdavClient {
       cancelToken: cancelToken,
     );
 
-    final target = Uri.parse(absoluteUrl(path));
     final statusMap = raw.entries
-        .firstWhereOrNull((entry) => _hrefIsTarget(entry.key, target))
+        .firstWhereOrNull((entry) => _isTarget(entry.key, path))
         ?.value;
     if (statusMap == null) {
       return const <String, XmlElement>{};
@@ -859,7 +858,19 @@ extension WebdavClientPropfind on WebdavClient {
       headers: headers,
     );
 
-    final rawMap = _parseXmlBody(resp, 'PROPFIND', parseMultiStatusToMap);
+    final rawMap = _parseXmlBody(
+      resp,
+      'PROPFIND',
+      (body) => parseMultiStatusToMap(
+        body,
+        keyOf: (response) => switch (_options.pathMode) {
+          _ when response.rawHref.isEmpty => '',
+          PathMode.baseRelative =>
+            _hrefTarget(response.rawHref, requestPath: path),
+          PathMode.legacy => response.href,
+        },
+      ),
+    );
     if (rawMap.isEmpty) {
       return const {};
     }
@@ -887,23 +898,9 @@ extension WebdavClientPropfind on WebdavClient {
   }
 }
 
-String? _firstHrefText(XmlElement? element) {
-  return _hrefList(element).firstOrNull;
-}
-
-List<String> _hrefList(XmlElement? element) {
-  if (element == null) {
-    return const <String>[];
-  }
-  return element
-      .findAllElements('href', namespaceUri: '*')
-      .map((href) => href.innerText.trim())
-      .where((href) => href.isNotEmpty)
-      .toList(growable: false);
-}
-
 final _schemeAuthorityReg = RegExp('^[A-Za-z][A-Za-z0-9+.-]*://[^/]*');
 
+// TODO: remove with the legacy path mode.
 /// Whether a once-decoded response href names the resolved request [target],
 /// which may carry the base URL's path. `Uri.path` stays percent-encoded, so
 /// decoding it here is the single decode for the target too.
@@ -917,7 +914,7 @@ bool _hrefOriginMatches(String decodedHref, Uri target) {
   final origin = _schemeAuthorityReg.firstMatch(decodedHref)?[0];
   if (origin == null) return true;
   final uri = Uri.tryParse(origin);
-  return uri != null && _sameOrigin(uri, target);
+  return uri != null && sameOrigin(uri, target);
 }
 
 /// Path of a decoded href without scheme, authority or trailing slash.

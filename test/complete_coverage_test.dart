@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:test/test.dart';
+import 'package:webdav_client_plus/src/internal/path_utils.dart';
 import 'package:webdav_client_plus/webdav_client_plus.dart';
 
 /// Final targeted tests to cover every remaining uncovered line.
@@ -468,172 +469,12 @@ void main() {
   </d:response>
 </d:multistatus>
 ''';
-      final files = WebdavFile.parseFiles('/', xml, skipSelf: false);
+      final files = WebdavFile.parseFiles(
+        xml,
+        (href) => decodeHref(href.trim()),
+      );
       expect(files.length, 1);
       expect(files.first.path, '/path/%C0%AE');
-    });
-  });
-
-  // ========== webdav_file.dart:279-280 (_normalizeHrefForComparison) ==========
-  group('_normalizeHrefForComparison edge cases', () {
-    test('href without scheme and with non-empty path (line 279-280)', () {
-      // scheme-less, non-empty path - parsed.path is non-empty
-      const xml = '''
-<?xml version="1.0" encoding="utf-8"?>
-<d:multistatus xmlns:d="DAV:">
-  <d:response>
-    <d:href>/dir/</d:href>
-    <d:propstat>
-      <d:prop>
-        <d:resourcetype><d:collection/></d:resourcetype>
-        <d:displayname>dir</d:displayname>
-      </d:prop>
-      <d:status>HTTP/1.1 200 OK</d:status>
-    </d:propstat>
-  </d:response>
-  <d:response>
-    <d:href>child.txt</d:href>
-    <d:propstat>
-      <d:prop>
-        <d:resourcetype/>
-        <d:displayname>child.txt</d:displayname>
-      </d:prop>
-      <d:status>HTTP/1.1 200 OK</d:status>
-    </d:propstat>
-  </d:response>
-</d:multistatus>
-''';
-      final files = WebdavFile.parseFiles('/dir/', xml, skipSelf: true);
-      expect(files.length, 1);
-      expect(files.first.name, 'child.txt');
-    });
-
-    test('href with query gets stripped (line 286)', () {
-      const xml = '''
-<?xml version="1.0" encoding="utf-8"?>
-<d:multistatus xmlns:d="DAV:">
-  <d:response>
-    <d:href>/dir/</d:href>
-    <d:propstat>
-      <d:prop>
-        <d:resourcetype><d:collection/></d:resourcetype>
-        <d:displayname>dir</d:displayname>
-      </d:prop>
-      <d:status>HTTP/1.1 200 OK</d:status>
-    </d:propstat>
-  </d:response>
-  <d:response>
-    <d:href>/dir/child.txt?v=1</d:href>
-    <d:propstat>
-      <d:prop>
-        <d:resourcetype/>
-        <d:displayname>child.txt</d:displayname>
-      </d:prop>
-      <d:status>HTTP/1.1 200 OK</d:status>
-    </d:propstat>
-  </d:response>
-</d:multistatus>
-''';
-      final files = WebdavFile.parseFiles('/dir/', xml, skipSelf: true);
-      expect(files.length, 1);
-      expect(files.first.name, 'child.txt');
-    });
-
-    test('href with fragment gets stripped (line 291)', () {
-      const xml = '''
-<?xml version="1.0" encoding="utf-8"?>
-<d:multistatus xmlns:d="DAV:">
-  <d:response>
-    <d:href>/dir/</d:href>
-    <d:propstat>
-      <d:prop>
-        <d:resourcetype><d:collection/></d:resourcetype>
-        <d:displayname>dir</d:displayname>
-      </d:prop>
-      <d:status>HTTP/1.1 200 OK</d:status>
-    </d:propstat>
-  </d:response>
-  <d:response>
-    <d:href>/dir/child.txt#frag</d:href>
-    <d:propstat>
-      <d:prop>
-        <d:resourcetype/>
-        <d:displayname>child.txt</d:displayname>
-      </d:prop>
-      <d:status>HTTP/1.1 200 OK</d:status>
-    </d:propstat>
-  </d:response>
-</d:multistatus>
-''';
-      final files = WebdavFile.parseFiles('/dir/', xml, skipSelf: true);
-      expect(files.length, 1);
-    });
-
-    test('href without leading slash gets / prepended (line 295)', () {
-      const xml = '''
-<?xml version="1.0" encoding="utf-8"?>
-<d:multistatus xmlns:d="DAV:">
-  <d:response>
-    <d:href>/dir/</d:href>
-    <d:propstat>
-      <d:prop>
-        <d:resourcetype><d:collection/></d:resourcetype>
-        <d:displayname>dir</d:displayname>
-      </d:prop>
-      <d:status>HTTP/1.1 200 OK</d:status>
-    </d:propstat>
-  </d:response>
-  <d:response>
-    <d:href>relative/child.txt</d:href>
-    <d:propstat>
-      <d:prop>
-        <d:resourcetype/>
-        <d:displayname>child.txt</d:displayname>
-      </d:prop>
-      <d:status>HTTP/1.1 200 OK</d:status>
-    </d:propstat>
-  </d:response>
-</d:multistatus>
-''';
-      final files = WebdavFile.parseFiles('/dir/', xml, skipSelf: true);
-      expect(files.length, 1);
-      expect(files.first.name, 'child.txt');
-    });
-
-    test(
-        'non-collection href ending with / gets trailing slash removed (line 308)',
-        () {
-      const xml = '''
-<?xml version="1.0" encoding="utf-8"?>
-<d:multistatus xmlns:d="DAV:">
-  <d:response>
-    <d:href>/dir/</d:href>
-    <d:propstat>
-      <d:prop>
-        <d:resourcetype><d:collection/></d:resourcetype>
-        <d:displayname>dir</d:displayname>
-      </d:prop>
-      <d:status>HTTP/1.1 200 OK</d:status>
-    </d:propstat>
-  </d:response>
-  <d:response>
-    <d:href>/dir/file/</d:href>
-    <d:propstat>
-      <d:prop>
-        <d:resourcetype/>
-        <d:displayname>file</d:displayname>
-      </d:prop>
-      <d:status>HTTP/1.1 200 OK</d:status>
-    </d:propstat>
-  </d:response>
-</d:multistatus>
-''';
-      final files = WebdavFile.parseFiles('/dir/', xml, skipSelf: true);
-      expect(files.length, 1);
-      // Non-collection with / ending: path preserves decoded href
-      expect(files.first.path, '/dir/file/');
-      // But name is still extracted
-      expect(files.first.name, 'file');
     });
   });
 }
