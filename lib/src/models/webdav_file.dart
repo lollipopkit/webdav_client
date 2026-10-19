@@ -218,10 +218,17 @@ DateTime? _parseIsoDate(String? value) {
   // DateTime.parse rolls invalid fields over (Feb 30 becomes Mar 1).
   if (month < 1 || month > 12) return null;
   if (day < 1 || day > DateTime.utc(year, month + 1, 0).day) return null;
-  // RFC 3339 §5.6 allows a leap second, which DateTime rolls into the next
-  // minute.
-  if (part(4) > 23 || part(5) > 59 || part(6) > 60) return null;
-  return DateTime.tryParse(value.toUpperCase())?.toLocal();
+  final second = part(6);
+  if (part(4) > 23 || part(5) > 59 || second > 60) return null;
+  final upper = value.toUpperCase();
+  if (second < 60) return DateTime.tryParse(upper)?.toLocal();
+
+  // RFC 3339 §5.7: a leap second can only end a UTC month, at 23:59:60Z.
+  // Seconds sit at a fixed offset in the matched format.
+  final before = DateTime.tryParse(upper.replaceRange(17, 19, '59'))?.toUtc();
+  if (before == null || before.hour != 23 || before.minute != 59) return null;
+  final after = before.add(const Duration(seconds: 1));
+  return after.day == 1 ? after.toLocal() : null;
 }
 
 /// RFC 3339 §5.6 `date-time`, with `T` and `Z` in either case.

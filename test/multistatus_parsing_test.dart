@@ -119,7 +119,13 @@ void main() {
         created('2016-12-31T23:59:60Z'),
         DateTime.utc(2017),
       );
+      expect(
+        created('2016-12-31T15:59:60-08:00'),
+        DateTime.utc(2017),
+      );
       expect(created('2016-12-31T23:59:61Z'), isNull);
+      expect(created('2024-01-15T10:30:60Z'), isNull);
+      expect(created('2024-01-15T23:59:60Z'), isNull);
       expect(created('20240115'), isNull);
       expect(created('2024-01-15 10:30'), isNull);
     });

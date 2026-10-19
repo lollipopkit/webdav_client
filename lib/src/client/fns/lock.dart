@@ -173,23 +173,10 @@ extension WebdavClientLock on WebdavClient {
       return const <(String, String)>[];
     }
 
-    return supported
-        .findElements('lockentry', namespaceUri: '*')
+    return davChildren(supported, 'lockentry')
         .map((entry) {
-          final scope = entry
-              .findElements('lockscope', namespaceUri: '*')
-              .firstOrNull
-              ?.childElements
-              .firstOrNull
-              ?.name
-              .local;
-          final type = entry
-              .findElements('locktype', namespaceUri: '*')
-              .firstOrNull
-              ?.childElements
-              .firstOrNull
-              ?.name
-              .local;
+          final scope = _firstChildName(entry, 'lockscope');
+          final type = _firstChildName(entry, 'locktype');
           if (scope == null || type == null) {
             return null;
           }
@@ -216,8 +203,7 @@ extension WebdavClientLock on WebdavClient {
       return const <ActiveLock>[];
     }
 
-    return discovery
-        .findElements('activelock', namespaceUri: '*')
+    return davChildren(discovery, 'activelock')
         .map((element) => _parseActiveLock(
               element,
               (href) => _hrefTarget(href, requestPath: path),
@@ -275,26 +261,8 @@ ActiveLock _parseActiveLock(
   XmlElement element,
   String Function(String href) toPath,
 ) {
-  String? firstChildName(String container) {
-    final containerElement = element.findElements(container, namespaceUri: '*')
-        .firstOrNull;
-    return containerElement?.childElements.firstOrNull?.name.local;
-  }
-
-  String? nestedText(String container, String child) {
-    final containerElement = element.findElements(container, namespaceUri: '*')
-        .firstOrNull;
-    final childElement = containerElement?.findElements(child, namespaceUri: '*')
-        .firstOrNull;
-    final text = childElement?.innerText.trim();
-    return text == null || text.isEmpty ? null : text;
-  }
-
-  String? directText(String name) {
-    final text = element.findElements(name, namespaceUri: '*')
-        .firstOrNull
-        ?.innerText
-        .trim();
+  String? text(XmlElement? child) {
+    final text = child?.innerText.trim();
     return text == null || text.isEmpty ? null : text;
   }
 
@@ -303,12 +271,20 @@ ActiveLock _parseActiveLock(
     null => null,
   };
   return ActiveLock(
-    token: nestedText('locktoken', 'href'),
-    scope: firstChildName('lockscope'),
-    type: firstChildName('locktype'),
-    depth: directText('depth'),
-    owner: directText('owner'),
-    timeout: directText('timeout'),
+    token: switch (davChild(element, 'locktoken')) {
+      final locktoken? => hrefText(locktoken),
+      null => null,
+    },
+    scope: _firstChildName(element, 'lockscope'),
+    type: _firstChildName(element, 'locktype'),
+    depth: text(davChild(element, 'depth')),
+    owner: text(davChild(element, 'owner')),
+    timeout: text(davChild(element, 'timeout')),
     lockRoot: lockRootHref == null ? null : toPath(lockRootHref),
   );
 }
+
+/// Local name of the first element inside the `DAV:` child [container] of
+/// [element], such as `exclusive` in `DAV:lockscope`.
+String? _firstChildName(XmlElement element, String container) =>
+    davChild(element, container)?.childElements.firstOrNull?.name.local;

@@ -26,6 +26,8 @@ void main() {
           <d:activelock>
             <d:lockscope><d:exclusive/></d:lockscope>
             <d:locktype><d:write/></d:locktype>
+            <x:depth xmlns:x="urn:x">bogus</x:depth>
+            <x:locktoken xmlns:x="urn:x"><d:href>bogus</d:href></x:locktoken>
             <d:depth>infinity</d:depth>
             <d:owner><d:href>mailto:alice@example.com</d:href></d:owner>
             <d:timeout>Second-3600</d:timeout>
