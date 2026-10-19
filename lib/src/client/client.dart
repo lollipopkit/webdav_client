@@ -209,8 +209,18 @@ class WebdavClient {
     });
   }
 
+  /// [_hrefTarget] for an href read from a property after the response body
+  /// was parsed, reporting a malformed href as a [WebdavException].
+  String _propertyHrefTarget(String href, String requestPath) {
+    try {
+      return _hrefTarget(href, requestPath: requestPath);
+    } on FormatException catch (e) {
+      throw WebdavException(message: 'Malformed href in response: $e');
+    }
+  }
+
   /// `DAV:href` values below [element] from the response for [requestPath],
-  /// converted like [WebdavFile.path].
+  /// converted by [_hrefTarget].
   List<String> _hrefs(String requestPath, XmlElement? element) {
     if (element == null) {
       return const <String>[];
@@ -219,7 +229,7 @@ class WebdavClient {
         .findAllElements('href', namespaceUri: 'DAV:')
         .map((href) => href.innerText.trim())
         .where((href) => href.isNotEmpty)
-        .map((href) => _hrefTarget(href, requestPath: requestPath))
+        .map((href) => _propertyHrefTarget(href, requestPath))
         .toList(growable: false);
   }
 

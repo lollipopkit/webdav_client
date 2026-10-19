@@ -80,7 +80,8 @@ String hrefToTarget(String baseUrl, String href, {String? requestUrl}) {
   // Servers may encode the base path differently, so compare decoded
   // segments.
   final baseSegments = baseUri.pathSegments.where((s) => s.isNotEmpty);
-  final segments = uri.path.substring(1).split('/');
+  final path = uri.path.isEmpty ? '/' : uri.path;
+  final segments = path.substring(1).split('/');
   var index = 0;
   for (final baseSegment in baseSegments) {
     if (index >= segments.length ||

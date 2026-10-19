@@ -74,6 +74,11 @@ void main() {
       );
     });
 
+    test('treats a URL without a path as the server root', () {
+      expect(hrefToTarget('https://example.com', 'https://example.com'), '/');
+      expect(hrefToTarget(_base, 'https://example.com'), 'https://example.com');
+    });
+
     test('resolves relative hrefs against the request URL', () {
       expect(
         hrefToTarget(_base, 'b.txt', requestUrl: '$_base/dir/'),
@@ -193,6 +198,24 @@ ${entries.map((e) => '''
       body = (_) => '';
       await expectLater(client().read('/../bob/secret'), throwsArgumentError);
       expect(requests, isEmpty);
+    });
+
+    test('reports malformed hrefs as WebdavException', () async {
+      const bad = 'http://[bad/x';
+      body = (_) => multistatus([
+        (
+          '/dav/alice/',
+          '<d:current-user-principal><d:href>$bad</d:href>'
+              '</d:current-user-principal>',
+        ),
+        (bad, '<d:resourcetype/>'),
+      ]);
+
+      await expectLater(client().readDir('/'), throwsA(isA<WebdavException>()));
+      await expectLater(
+        client().currentUserPrincipal(),
+        throwsA(isA<WebdavException>()),
+      );
     });
 
     test('bind sends the source path as an absolute URL', () async {

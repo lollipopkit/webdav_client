@@ -206,7 +206,10 @@ extension WebdavClientLock on WebdavClient {
     return davChildren(discovery, 'activelock')
         .map((element) => _parseActiveLock(
               element,
-              (href) => _hrefTarget(href, requestPath: path),
+              (href) => switch (_options.pathMode) {
+                PathMode.baseRelative => _propertyHrefTarget(href, path),
+                PathMode.legacy => decodeHref(href.trim()),
+              },
             ))
         .toList(growable: false);
   }

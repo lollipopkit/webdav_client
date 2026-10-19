@@ -203,6 +203,9 @@ T _parseXmlBody<T>(
     return parse(body);
   } on XmlException catch (e) {
     throw error('Unable to parse $request response: $e');
+  } on FormatException catch (e) {
+    // Such as an href that is not a valid URI reference.
+    throw error('Malformed $request response: $e');
   }
 }
 

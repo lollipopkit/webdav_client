@@ -58,5 +58,12 @@ void main() {
     expect(locks.single.owner, 'mailto:alice@example.com');
     expect(locks.single.timeout, 'Second-3600');
     expect(locks.single.lockRoot, '/dir a/');
+
+    final legacy = WebdavClient.noAuth(
+      url: 'http://${server.address.host}:${server.port}',
+      options: const WebdavOptions(pathMode: PathMode.legacy),
+    );
+    final legacyLocks = await legacy.lockDiscovery('/file.txt');
+    expect(legacyLocks.single.lockRoot, '/dir a/');
   });
 }
