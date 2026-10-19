@@ -53,6 +53,8 @@
 - `mkdirAll` no longer issues MKCOL for collections above the base URL when
   it creates missing parents, and a `%XX` sequence in a listed name no longer
   turns into a different name when `WebdavFile.path` is passed back.
+- `WebdavFile.created` accepts an RFC 3339 leap second (`23:59:60`) instead of
+  dropping the value.
 - Headers a request must not carry (sensitive ones after a cross-origin
   redirect, entity ones on a 303 GET) are removed from the final request
   instead of being set to `null`, which the web adapter sent as the literal
