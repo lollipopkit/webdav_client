@@ -575,8 +575,9 @@ class WebdavClient {
       return const <String>[];
     }
 
-    return supported
-        .findAllElements('report', namespaceUri: '*')
+    return davChildren(supported, 'supported-report')
+        .map((entry) => davChild(entry, 'report'))
+        .whereType<XmlElement>()
         .expand((report) => report.childElements)
         .map(_formatPropertyName)
         .toList(growable: false);

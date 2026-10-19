@@ -442,8 +442,7 @@ extension WebdavClientPropfind on WebdavClient {
       return const <String>[];
     }
 
-    return element
-        .findAllElements('privilege', namespaceUri: '*')
+    return davChildren(element, 'privilege')
         .expand((privilege) => privilege.childElements)
         .map(_formatPropertyName)
         .toList(growable: false);
@@ -465,7 +464,7 @@ extension WebdavClientPropfind on WebdavClient {
     if (acl == null) {
       return const <XmlElement>[];
     }
-    return acl.findElements('ace', namespaceUri: '*').toList(growable: false);
+    return davChildren(acl, 'ace').toList(growable: false);
   }
 
   /// Discover inherited ACL set hrefs for [path] (RFC 3744 §5.6).
@@ -681,8 +680,7 @@ extension WebdavClientPropfind on WebdavClient {
     if (supported == null) {
       return const <String>[];
     }
-    return supported
-        .findAllElements('supported-method', namespaceUri: '*')
+    return davChildren(supported, 'supported-method')
         .map((element) => element.getAttribute('name')?.trim())
         .whereType<String>()
         .where((name) => name.isNotEmpty)
@@ -705,9 +703,15 @@ extension WebdavClientPropfind on WebdavClient {
     if (supported == null) {
       return const <String>[];
     }
-    return supported
-        .findAllElements('supported-live-property', namespaceUri: '*')
-        .map((element) => element.childElements.firstOrNull)
+    // RFC 3253 §3.1.4 declares the child as `name` but defines `prop`; accept
+    // either wrapper as well as the property element itself.
+    return davChildren(supported, 'supported-live-property')
+        .map((element) {
+          final child = element.childElements.firstOrNull;
+          final isWrapper = child?.namespaceUri == 'DAV:' &&
+              (child?.localName == 'name' || child?.localName == 'prop');
+          return isWrapper ? child?.childElements.firstOrNull : child;
+        })
         .whereType<XmlElement>()
         .map(_formatPropertyName)
         .toList(growable: false);

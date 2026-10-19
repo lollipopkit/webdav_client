@@ -298,13 +298,10 @@ extension _Utils on WebdavClient {
 
     // First, try activelock/locktoken/href
     final activeLockElements =
-        document.findAllElements('activelock', namespaceUri: '*');
+        document.findAllElements('activelock', namespaceUri: 'DAV:');
     for (final activeLock in activeLockElements) {
-      final lockTokenElements =
-          activeLock.findElements('locktoken', namespaceUri: '*');
-      for (final lockToken in lockTokenElements) {
-        final href = lockToken.findElements('href', namespaceUri: '*').firstOrNull;
-        final token = href?.innerText.trim();
+      for (final lockToken in davChildren(activeLock, 'locktoken')) {
+        final token = hrefText(lockToken);
         if (token != null && token.isNotEmpty) {
           return token;
         }
@@ -313,17 +310,16 @@ extension _Utils on WebdavClient {
 
     // Fall back to locktoken/href
     final lockTokenElements =
-        document.findAllElements('locktoken', namespaceUri: '*');
+        document.findAllElements('locktoken', namespaceUri: 'DAV:');
     for (final lockToken in lockTokenElements) {
-      final href = lockToken.findElements('href', namespaceUri: '*').firstOrNull;
-      final token = href?.innerText.trim();
+      final token = hrefText(lockToken);
       if (token != null && token.isNotEmpty) {
         return token;
       }
     }
 
     // Try
-    final hrefElements = document.findAllElements('href', namespaceUri: '*');
+    final hrefElements = document.findAllElements('href', namespaceUri: 'DAV:');
     for (final href in hrefElements) {
       final text = href.innerText.trim();
       if (text.startsWith('urn:uuid:') || text.startsWith('opaquelocktoken:')) {

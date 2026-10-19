@@ -54,14 +54,12 @@ class WebdavException<T extends Object?> implements Exception {
           }
 
           final xmlDoc = XmlDocument.parse(body);
-          final errorElements = xmlDoc.findAllElements('error', namespaceUri: '*');
+          final errorElements = xmlDoc.findAllElements('error', namespaceUri: 'DAV:');
           if (errorElements.isNotEmpty) {
             // Check common WebDAV preconditions/postconditions codes
             for (final errorElement in errorElements) {
               // Lookup for lock-token-submitted
-              if (errorElement
-                  .findElements('lock-token-submitted', namespaceUri: '*')
-                  .isNotEmpty) {
+              if (davChild(errorElement, 'lock-token-submitted') != null) {
                 return WebdavException(
                   message: 'Resource is locked and requires a valid lock token',
                   statusCode: status,
@@ -69,9 +67,7 @@ class WebdavException<T extends Object?> implements Exception {
                   response: response,
                 );
               }
-              if (errorElement
-                  .findElements('no-conflicting-lock', namespaceUri: '*')
-                  .isNotEmpty) {
+              if (davChild(errorElement, 'no-conflicting-lock') != null) {
                 return WebdavException(
                   message: 'The resource has a conflicting lock',
                   statusCode: status,

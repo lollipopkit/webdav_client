@@ -55,9 +55,12 @@
   turns into a different name when `WebdavFile.path` is passed back.
 - `WebdavFile.created` accepts an RFC 3339 leap second (`23:59:60` UTC at the
   end of a month) instead of dropping the value.
-- `lockDiscovery` and `supportedLocks` read lock fields only from the `DAV:`
-  namespace, so a same-named element from another namespace no longer fills
-  them.
+- WebDAV elements are matched in the `DAV:` namespace only, so a same-named
+  element from another namespace no longer fills lock fields, lock tokens,
+  `DAV:error` preconditions, ACL entries, privileges, supported methods or
+  supported reports.
+- `supportedLiveProperties` unwraps the `DAV:name` / `DAV:prop` element of
+  RFC 3253 §3.1.4 instead of reporting the wrapper.
 - Headers a request must not carry (sensitive ones after a cross-origin
   redirect, entity ones on a 303 GET) are removed from the final request
   instead of being set to `null`, which the web adapter sent as the literal
