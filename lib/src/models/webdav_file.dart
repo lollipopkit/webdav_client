@@ -218,7 +218,9 @@ DateTime? _parseIsoDate(String? value) {
   // DateTime.parse rolls invalid fields over (Feb 30 becomes Mar 1).
   if (month < 1 || month > 12) return null;
   if (day < 1 || day > DateTime.utc(year, month + 1, 0).day) return null;
-  if (part(4) > 23 || part(5) > 59 || part(6) > 59) return null;
+  // RFC 3339 §5.6 allows a leap second, which DateTime rolls into the next
+  // minute.
+  if (part(4) > 23 || part(5) > 59 || part(6) > 60) return null;
   return DateTime.tryParse(value.toUpperCase())?.toLocal();
 }
 

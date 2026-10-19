@@ -115,6 +115,11 @@ void main() {
       expect(created('Mon, 15 Jan 2024 10:30:00 GMT'), expected);
       expect(created('2024-02-30T10:00:00Z'), isNull);
       expect(created('2024-01-15T24:00:00Z'), isNull);
+      expect(
+        created('2016-12-31T23:59:60Z'),
+        DateTime.utc(2017),
+      );
+      expect(created('2016-12-31T23:59:61Z'), isNull);
       expect(created('20240115'), isNull);
       expect(created('2024-01-15 10:30'), isNull);
     });
