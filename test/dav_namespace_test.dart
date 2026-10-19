@@ -118,7 +118,7 @@ void main() {
     );
     expect(
       error(
-        '<d:error xmlns:d="DAV:" xmlns:x="urn:x">'
+        '<d:error xmlns:d="DAV:" xmlns:x="urn:x"> '
         '<x:no-conflicting-lock/></d:error>',
       ).message,
       isNot('The resource has a conflicting lock'),
