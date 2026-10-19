@@ -26,6 +26,12 @@
 - The license changes from BSD-3-Clause to Apache-2.0. `NOTICE` keeps the
   original BSD-3-Clause notice for the upstream `webdav_client` code.
 
+### Added
+
+- `ActiveLock.lockRoot` exposes the `DAV:lockroot` href, so a lock inherited
+  from a parent collection can be told apart and unlocked or refreshed on its
+  root.
+
 ### Fixed
 
 - Headers a request must not carry (sensitive ones after a cross-origin
