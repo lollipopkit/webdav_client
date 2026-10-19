@@ -88,7 +88,7 @@ void main() {
       await client.mkdirAll('/$_testDir/sub');
 
       final files = await client.readDir('/$_testDir');
-      expect(files.map((f) => f.path), ['$_davPrefix/$_testDir/sub/']);
+      expect(files.map((f) => f.path), ['/$_testDir/sub/']);
     });
 
     test('list with infinite depth', () async {
@@ -99,9 +99,9 @@ void main() {
       expect(
         files.map((f) => f.path),
         unorderedEquals([
-          '$_davPrefix/$_testDir/a/',
-          '$_davPrefix/$_testDir/a/b/',
-          '$_davPrefix/$_testDir/a/b/$_testFile',
+          '/$_testDir/a/',
+          '/$_testDir/a/b/',
+          '/$_testDir/a/b/$_testFile',
         ]),
       );
     });

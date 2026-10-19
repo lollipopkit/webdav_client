@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:webdav_client_plus/src/options.dart';
+
 /// Join [path0] and [path1] ensuring exactly one slash boundary between them.
 String joinPath(String path0, String path1) {
   while (path0.isNotEmpty && path0.endsWith('/')) {
@@ -21,9 +23,118 @@ String joinPath(String path0, String path1) {
           : '$path0/$path1';
 }
 
-final _absoluteHttpUrl = RegExp('https?://', caseSensitive: false);
+final _absoluteHttpUrl = RegExp('^https?://', caseSensitive: false);
 
-/// Resolve [target] against [baseUrl] in a WebDAV-aware manner.
+/// Resolve [target] against [baseUrl] following [mode].
+String resolveTarget(String baseUrl, String target, PathMode mode) =>
+    switch (mode) {
+      PathMode.baseRelative => _resolveBaseRelative(baseUrl, target),
+      PathMode.legacy => resolveAgainstBaseUrl(baseUrl, target),
+    };
+
+/// Resolve [target] as described by [PathMode.baseRelative].
+String _resolveBaseRelative(String baseUrl, String target) {
+  if (target.startsWith(_absoluteHttpUrl)) {
+    return Uri.parse(target).toString();
+  }
+
+  final rawSegments = target.split('/');
+  final segments = <String>[];
+  for (final segment in rawSegments) {
+    switch (segment) {
+      case '' || '.':
+        continue;
+      case '..':
+        if (segments.isEmpty) {
+          throw ArgumentError.value(target, 'path', 'escapes the base URL');
+        }
+        segments.removeLast();
+      default:
+        segments.add(segment);
+    }
+  }
+
+  final baseUri = Uri.parse(baseUrl);
+  final buffer = StringBuffer(_collectionPath(baseUri.path))
+    ..writeAll(segments.map(Uri.encodeComponent), '/');
+  if (segments.isNotEmpty && const {'', '.', '..'}.contains(rawSegments.last)) {
+    buffer.write('/');
+  }
+  return _replaceRawPath(baseUri, buffer.toString());
+}
+
+/// Convert a response [href] to the target form of [PathMode.baseRelative]:
+/// the decoded path relative to [baseUrl] when the
+/// href lies inside it, otherwise the absolute URL. Relative hrefs resolve
+/// against [requestUrl], the URL the response answers.
+String hrefToTarget(String baseUrl, String href, {String? requestUrl}) {
+  final baseUri = Uri.parse(baseUrl);
+  // A fragment never reaches the server, so it does not change the resource;
+  // a query does.
+  final uri =
+      Uri.parse(requestUrl ?? baseUrl).resolve(href.trim()).removeFragment();
+  if (!sameOrigin(uri, baseUri) || uri.hasQuery) {
+    return uri.toString();
+  }
+
+  // Servers may encode the base path differently, so compare decoded
+  // segments.
+  final baseSegments = baseUri.pathSegments.where((s) => s.isNotEmpty);
+  final segments = uri.path.substring(1).split('/');
+  var index = 0;
+  for (final baseSegment in baseSegments) {
+    if (index >= segments.length ||
+        _decodeSegment(segments[index]) != baseSegment) {
+      return uri.toString();
+    }
+    index++;
+  }
+
+  final decoded = <String>[];
+  for (var i = index; i < segments.length; i++) {
+    final segment = _decodeSegment(segments[i]);
+    // Names the decoded form cannot express, such as an encoded `/`, keep
+    // the URL so the exact resource stays addressable.
+    final isLast = i == segments.length - 1;
+    if (segment == null ||
+        segment.contains('/') ||
+        segment == '.' ||
+        segment == '..' ||
+        (segment.isEmpty && !isLast)) {
+      return uri.toString();
+    }
+    decoded.add(segment);
+  }
+  return '/${decoded.join('/')}';
+}
+
+/// Strictly percent-decode a path [segment], or `null` when it is not valid
+/// UTF-8 percent-encoding.
+String? _decodeSegment(String segment) {
+  try {
+    return Uri.decodeComponent(segment);
+  } on FormatException {
+    return null;
+  }
+}
+
+/// Whether [a] and [b] share scheme, host and port (RFC 6454 §5), treating a
+/// missing scheme as http and a missing port as the scheme's default.
+bool sameOrigin(Uri a, Uri b) {
+  String scheme(Uri uri) =>
+      uri.scheme.isEmpty ? 'http' : uri.scheme.toLowerCase();
+  int port(Uri uri) => uri.hasPort
+      ? uri.port
+      : switch (scheme(uri)) { 'https' => 443, 'http' => 80, _ => 0 };
+  return scheme(a) == scheme(b) &&
+      a.host.toLowerCase() == b.host.toLowerCase() &&
+      port(a) == port(b);
+}
+
+String _collectionPath(String path) => path.endsWith('/') ? path : '$path/';
+
+/// Resolve [target] against [baseUrl] as described by [PathMode.legacy].
+// TODO: remove with the legacy path mode.
 ///
 /// Preserves percent-encoding of special characters (such as `%2F` for `/`)
 /// that would otherwise be decoded and lost through `Uri.pathSegments`.
@@ -292,4 +403,61 @@ String decodeHref(String href) {
   } on FormatException {
     return href;
   }
+}
+
+/// Comparison key of [href] as described by [PathMode.legacy].
+// TODO: remove with the legacy path mode.
+String legacyHrefKey(
+  String href, {
+  required bool treatAsCollection,
+}) {
+  var value = href.trim();
+  if (value.isEmpty) {
+    return treatAsCollection ? '/' : '/';
+  }
+
+  Uri? parsed;
+  try {
+    parsed = Uri.parse(value);
+  } catch (_) {
+    parsed = null;
+  }
+
+  if (parsed != null) {
+    if (parsed.hasScheme || value.startsWith('/')) {
+      value = parsed.path;
+    } else if (parsed.path.isNotEmpty) {
+      value = parsed.path;
+    }
+  }
+
+  final queryIndex = value.indexOf('?');
+  if (queryIndex != -1) {
+    value = value.substring(0, queryIndex);
+  }
+
+  final fragmentIndex = value.indexOf('#');
+  if (fragmentIndex != -1) {
+    value = value.substring(0, fragmentIndex);
+  }
+
+  if (!value.startsWith('/')) {
+    value = '/$value';
+  }
+
+  value = value.replaceAll(RegExp('/+'), '/');
+  if (value.isEmpty) {
+    value = '/';
+  }
+
+  if (treatAsCollection) {
+    if (!value.endsWith('/')) {
+      value = '$value/';
+    }
+  } else if (value.length > 1 && value.endsWith('/')) {
+    value = value.substring(0, value.length - 1);
+  }
+
+  // Servers may percent-encode differently than the client did.
+  return decodeHref(value);
 }

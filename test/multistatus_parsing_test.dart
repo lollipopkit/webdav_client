@@ -20,11 +20,13 @@ String _response(String href, String props) => '''
   </d:propstat>
 </d:response>''';
 
+String _toPath(String href) => decodeHref(href.trim());
+
 void main() {
   group('href decoding', () {
     test('keeps an href that is not valid percent-encoding', () {
       final xml = _multiStatus(_response('/50%.txt', '<d:resourcetype/>'));
-      expect(WebdavFile.parseFiles('/', xml).single.path, '/50%.txt');
+      expect(WebdavFile.parseFiles(xml, _toPath).single.path, '/50%.txt');
       expect(parseMultiStatus(xml).single.href, '/50%.txt');
     });
 
@@ -33,7 +35,7 @@ void main() {
         _response('/dav/x%2541.txt', '<d:resourcetype/>') +
             _response('/dav/50%25.txt', '<d:resourcetype/>'),
       );
-      final files = WebdavFile.parseFiles('/', xml);
+      final files = WebdavFile.parseFiles(xml, _toPath);
       expect(files.map((f) => f.path), ['/dav/x%41.txt', '/dav/50%.txt']);
       expect(files.map((f) => f.name), ['x%41.txt', '50%.txt']);
       expect(parseMultiStatus(xml).first.href, '/dav/x%41.txt');
@@ -45,7 +47,7 @@ void main() {
             _response('/dav/文件%20a%E2%82%AC.txt', '<d:resourcetype/>') +
             _response('/dav/😀%41', '<d:resourcetype/>'),
       );
-      expect(WebdavFile.parseFiles('/', xml).map((f) => f.path), [
+      expect(WebdavFile.parseFiles(xml, _toPath).map((f) => f.path), [
         '/dav/文件.txt',
         '/dav/文件 a€.txt',
         '/dav/😀A',
@@ -60,7 +62,7 @@ void main() {
 
     test('trims surrounding whitespace', () {
       final xml = _multiStatus(_response('\n  /dav/f\n', '<d:resourcetype/>'));
-      final file = WebdavFile.parseFiles('/', xml).single;
+      final file = WebdavFile.parseFiles(xml, _toPath).single;
       expect(file.path, '/dav/f');
       expect(file.name, 'f');
       expect(parseMultiStatus(xml).single.href, '/dav/f');
@@ -75,7 +77,7 @@ void main() {
       ),
       ns: ' xmlns:x="urn:x"',
     );
-    expect(WebdavFile.parseFiles('/', xml).map((f) => f.path), ['/dav/real']);
+    expect(WebdavFile.parseFiles(xml, _toPath).map((f) => f.path), ['/dav/real']);
     expect(parseMultiStatus(xml).map((r) => r.href), ['/dav/real']);
   });
 
@@ -91,7 +93,7 @@ void main() {
         ),
         ns: ' xmlns:x="urn:x"',
       );
-      final file = WebdavFile.parseFiles('/', xml).single;
+      final file = WebdavFile.parseFiles(xml, _toPath).single;
       expect(file.name, 'real');
       expect(file.isDir, isFalse);
       expect(file.size, 5);
@@ -100,11 +102,11 @@ void main() {
 
     test('parses creationdate variants', () {
       DateTime? created(String value) => WebdavFile.parseFiles(
-            '/',
             _multiStatus(_response(
               '/f',
               '<d:creationdate>$value</d:creationdate>',
             )),
+            _toPath,
           ).single.created?.toUtc();
 
       final expected = DateTime.utc(2024, 1, 15, 10, 30);
@@ -119,11 +121,11 @@ void main() {
 
     test('reads two-digit RFC 850 years per RFC 9110 §5.6.7', () {
       int? year(String yy) => WebdavFile.parseFiles(
-            '/',
             _multiStatus(_response(
               '/f',
               '<d:getlastmodified>Sunday, 01-Jan-$yy 00:00:00 GMT</d:getlastmodified>',
             )),
+            _toPath,
           ).single.modified?.toUtc().year;
 
       final now = DateTime.now().toUtc().year;
@@ -220,6 +222,10 @@ void main() {
             _response('/dav/dir/', '<d:displayname>dir</d:displayname>') +
                 _response('/dav/dir/a', '<d:displayname>a</d:displayname>'),
           );
+      final client = WebdavClient.noAuth(
+        url: 'http://127.0.0.1:${server.port}/dav',
+        options: const WebdavOptions(pathMode: PathMode.legacy),
+      );
       for (final path in ['/dir', '/dir/', '/dav/dir']) {
         final props = await client.propFind(path, depth: PropsDepth.one);
         expect(props['{DAV:}displayname']?.innerText, 'dir', reason: path);
@@ -234,6 +240,10 @@ void main() {
                   '<d:displayname>percent</d:displayname>',
                 ),
           );
+      final client = WebdavClient.noAuth(
+        url: 'http://127.0.0.1:${server.port}/dav',
+        options: const WebdavOptions(pathMode: PathMode.legacy),
+      );
       final props = await client.propFind('/a%2520b', depth: PropsDepth.one);
       expect(props['{DAV:}displayname']?.innerText, 'percent');
     });
@@ -340,7 +350,7 @@ void main() {
 
       test('readProps returns the requested resource', () async {
         final file = await client.readProps('/');
-        expect(file?.path, '/dav/');
+        expect(file?.path, '/');
       });
 
       test('quotaBytes reads the requested resource', () async {

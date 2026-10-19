@@ -99,7 +99,16 @@ extension WebdavClientMk on WebdavClient {
       return;
     }
     if (status == 409) {
-      final pathOnly = path.split('?').first.split('#').first;
+      final String pathOnly;
+      switch (_options.pathMode) {
+        case PathMode.baseRelative:
+          pathOnly = hrefToTarget(url, absoluteUrl(path));
+          // Collections outside the base URL are not created one by one.
+          if (!pathOnly.startsWith('/')) throw _newResponseError(resp);
+        // TODO: remove with the legacy path mode.
+        case PathMode.legacy:
+          pathOnly = path.split('?').first.split('#').first;
+      }
       final paths = pathOnly.split('/').where((segment) => segment.isNotEmpty);
       final sub = StringBuffer('/');
       for (final e in paths) {

@@ -50,21 +50,35 @@ WebdavClient(
 
 ### Paths
 
-Paths are resolved against `url`, so with `url: 'https://example.com/dav'` the
-path `/docs/a.txt` addresses `https://example.com/dav/docs/a.txt`. Paths that
-already start with the base path, and absolute URLs, are used as they are.
-`client.absoluteUrl(path)` shows the URL a path resolves to.
+Paths are decoded names relative to `url`: with
+`url: 'https://example.com/dav'`, both `/docs/a.txt` and `docs/a.txt` address
+`https://example.com/dav/docs/a.txt`. Every character belongs to the name, so
+`/50% done?.txt` is encoded as `/dav/50%25%20done%3F.txt`. `..` cannot leave
+`url`; such a path throws `ArgumentError`. Absolute `http(s)://` URLs are used
+as they are. `client.absoluteUrl(path)` shows the URL a path resolves to.
 
-`WebdavFile.path` is the href reported by the server, so it includes the base
-path (`/dav/docs/a.txt`).
+`WebdavFile.path` and the hrefs returned by discovery helpers use the same
+form (`/docs/a.txt`), so they can be passed back as they are. Resources outside
+`url` are reported as absolute URLs.
+
+`PathMode.legacy` keeps the behaviour before 3.0.0 and will be removed in the
+next major release.
 
 ### Settings
 
 ```dart
-client.setHeaders({'accept-charset': 'utf-8'});
+final client = WebdavClient.noAuth(
+  url: 'https://example.com/dav',
+  options: WebdavOptions(
+    headers: {'accept-charset': 'utf-8'},
+    connectTimeout: Duration(seconds: 8),
+    sendTimeout: Duration(seconds: 8),
+    receiveTimeout: Duration(seconds: 8),
+  ),
+);
+
+// The settings can also be changed later.
 client.setConnectTimeout(8000); // milliseconds
-client.setSendTimeout(8000);
-client.setReceiveTimeout(8000);
 
 await client.ping(); // throws if the server is unreachable
 ```
