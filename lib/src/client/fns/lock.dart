@@ -9,6 +9,11 @@ class ActiveLock {
   final String? owner;
   final String? timeout;
 
+  /// Raw `DAV:lockroot` href (RFC 4918 §14.12): the resource the lock was
+  /// taken on, which differs from the queried path for locks inherited
+  /// through a Depth infinity lock on a parent collection.
+  final String? lockRoot;
+
   const ActiveLock({
     this.token,
     this.scope,
@@ -16,6 +21,7 @@ class ActiveLock {
     this.depth,
     this.owner,
     this.timeout,
+    this.lockRoot,
   });
 }
 
@@ -293,5 +299,9 @@ ActiveLock _parseActiveLock(XmlElement element) {
     depth: directText('depth'),
     owner: directText('owner'),
     timeout: directText('timeout'),
+    lockRoot: switch (davChild(element, 'lockroot')) {
+      final root? => hrefText(root),
+      null => null,
+    },
   );
 }

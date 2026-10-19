@@ -30,6 +30,7 @@ void main() {
             <d:owner><d:href>mailto:alice@example.com</d:href></d:owner>
             <d:timeout>Second-3600</d:timeout>
             <d:locktoken><d:href>opaquelocktoken:abc</d:href></d:locktoken>
+            <d:lockroot><d:href>/dir%20a/</d:href></d:lockroot>
           </d:activelock>
         </d:lockdiscovery>
       </d:prop>
@@ -54,5 +55,6 @@ void main() {
     expect(locks.single.depth, 'infinity');
     expect(locks.single.owner, 'mailto:alice@example.com');
     expect(locks.single.timeout, 'Second-3600');
+    expect(locks.single.lockRoot, '/dir%20a/');
   });
 }

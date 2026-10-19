@@ -44,6 +44,9 @@
 - `WebdavOptions` configures `pathMode`, headers and timeouts when creating a
   client; `WebdavClient.webdavOptions` reflects later `set*` calls.
 - `MultiStatusResponse.rawHref` keeps the href as sent by the server.
+- `ActiveLock.lockRoot` exposes the `DAV:lockroot` resource in the same form
+  as `WebdavFile.path`, so a lock inherited from a parent collection can be
+  told apart and unlocked or refreshed on its root.
 
 ### Fixed
 
