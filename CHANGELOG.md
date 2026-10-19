@@ -23,6 +23,8 @@
   `xml` dependencies. Code that also imports another library exporting one of
   these names, such as `Response` from `package:http`, needs a prefix or
   `hide` on one of the imports.
+- The license changes from BSD-3-Clause to Apache-2.0. `NOTICE` keeps the
+  original BSD-3-Clause notice for the upstream `webdav_client` code.
 
 ### Fixed
 
