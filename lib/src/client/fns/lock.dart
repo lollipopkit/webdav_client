@@ -208,10 +208,26 @@ extension WebdavClientLock on WebdavClient {
               element,
               (href) => switch (_options.pathMode) {
                 PathMode.baseRelative => _propertyHrefTarget(href, path),
-                PathMode.legacy => decodeHref(href.trim()),
+                PathMode.legacy => _legacyLockRoot(href, path),
               },
             ))
         .toList(growable: false);
+  }
+
+  /// Decoded lockroot [href] in the form of legacy [WebdavFile.path], with a
+  /// relative reference first resolved against the request URL for [path].
+  // TODO: remove with the legacy path mode.
+  String _legacyLockRoot(String href, String path) {
+    final trimmed = href.trim();
+    if (trimmed.startsWith('/') ||
+        Uri.tryParse(trimmed)?.hasScheme != false) {
+      return decodeHref(trimmed);
+    }
+    try {
+      return decodeHref(Uri.parse(absoluteUrl(path)).resolve(trimmed).path);
+    } on FormatException catch (e) {
+      throw WebdavException(message: 'Malformed href in response: $e');
+    }
   }
 
   /// Refresh an existing lock using its lock token.

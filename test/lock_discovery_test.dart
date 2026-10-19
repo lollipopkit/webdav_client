@@ -66,4 +66,45 @@ void main() {
     final legacyLocks = await legacy.lockDiscovery('/file.txt');
     expect(legacyLocks.single.lockRoot, '/dir a/');
   });
+
+  test(
+    'lockDiscovery resolves a relative lockroot against the request',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() async => server.close(force: true));
+
+      server.listen((request) async {
+        await request.drain();
+        request.response
+          ..statusCode = 207
+          ..headers.contentType = ContentType('application', 'xml')
+          ..write('''<?xml version="1.0"?>
+<d:multistatus xmlns:d="DAV:">
+  <d:response>
+    <d:href>/x/file.txt</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:lockdiscovery>
+          <d:activelock>
+            <d:lockroot><d:href>dir%20a/</d:href></d:lockroot>
+          </d:activelock>
+        </d:lockdiscovery>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+</d:multistatus>''');
+        await request.response.close();
+      });
+
+      for (final mode in PathMode.values) {
+        final client = WebdavClient.noAuth(
+          url: 'http://${server.address.host}:${server.port}',
+          options: WebdavOptions(pathMode: mode),
+        );
+        final locks = await client.lockDiscovery('/x/file.txt');
+        expect(locks.single.lockRoot, '/x/dir a/', reason: mode.name);
+      }
+    },
+  );
 }
